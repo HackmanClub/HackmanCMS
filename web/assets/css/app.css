@@ -265,15 +265,24 @@ pre  { color: #e6edf3; }
 .mk-pane-kebab .btn:hover { background: #21262d; color: #e6edf3; }
 
 
-/* FM editor — slots into the same flex slot as .ie-mk-body when active */
-.mk-mount-wrap .ie-mk-fm {
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: column;
-  background: var(--hm-surface);
+/* FM block — first fenced ```yaml block acts as inline frontmatter editor */
+.mk-mount-wrap .ie-mk-body .ProseMirror > :first-child pre {
+  border-left: 3px solid var(--bs-primary);
+  background: #0d1117;
+  position: relative;
 }
-.mk-mount-wrap .ie-mk-fm .CodeMirror { flex: 1; height: 100% !important; }
-.mk-mount-wrap .mk-fm-toggle.active {
-  background: #21262d; color: #e6edf3;
+.mk-mount-wrap .ie-mk-body .ProseMirror > :first-child pre::before {
+  content: "FM";
+  display: inline-block;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .12);
+  border: 1px solid rgba(var(--bs-primary-rgb), .3);
+  border-radius: 3px;
+  padding: 0 .3em;
+  margin-bottom: .35rem;
 }
 /* Milkdown via Agenda-style mk-mount — dark theme + full-height inside tab pane */
 .mk-mount-wrap {

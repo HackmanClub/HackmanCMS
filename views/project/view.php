@@ -142,10 +142,17 @@ $tabGroups = [
     <div class="d-flex align-items-center gap-1 mb-2 flex-wrap">
       <button class="btn btn-sm btn-outline-primary active" id="showPosts">Posts</button>
       <button class="btn btn-sm btn-outline-secondary" id="showPages">Pages</button>
-      <button class="btn btn-sm btn-outline-secondary" id="showDrafts">Drafts</button>
-      <button class="btn btn-sm btn-primary" id="newItemBtn" title="New draft">
-        <i class="bi bi-plus-lg"></i> New
-      </button>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-primary" id="newItemBtn"><i class="bi bi-plus-lg"></i> New</button>
+        <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+          <span class="visually-hidden">Toggle</span>
+        </button>
+        <ul class="dropdown-menu">
+          <li><button class="dropdown-item small new-type-btn" data-type="post"><i class="bi bi-file-text me-2"></i>Post</button></li>
+          <li><button class="dropdown-item small new-type-btn" data-type="draft"><i class="bi bi-pencil-square me-2"></i>Draft</button></li>
+          <li><button class="dropdown-item small new-type-btn" data-type="page"><i class="bi bi-file-earmark me-2"></i>Page</button></li>
+        </ul>
+      </div>
       <div class="input-group input-group-sm ms-auto" style="max-width:160px">
         <input type="text" id="searchQuery" class="form-control" placeholder="Search…" autocomplete="off">
         <button class="btn btn-outline-secondary" id="searchClearBtn" title="Clear"><i class="bi bi-x-lg"></i></button>
@@ -372,6 +379,74 @@ $tabGroups = [
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-danger btn-sm" id="confirmDelete"
                 data-project-id="<?= $pid ?>">Remove</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New post/draft/page -->
+<div class="modal fade" id="newPostModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="newPostModalTitle">New Post</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label small mb-1">Title</label>
+          <input type="text" id="newPostTitle" class="form-control form-control-sm" placeholder="Post title" autocomplete="off">
+        </div>
+        <div>
+          <label class="form-label small mb-1">Folder <span class="text-muted">(optional)</span></label>
+          <input type="text" id="newPostFolder" class="form-control form-control-sm font-monospace" placeholder="2026">
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <div class="text-danger small d-none flex-grow-1" id="newPostError"></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="newPostCreateBtn">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Rename file -->
+<div class="modal fade" id="renameModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">Rename</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="renameInput" class="form-control form-control-sm font-monospace" autocomplete="off">
+      </div>
+      <div class="modal-footer py-2">
+        <div class="text-danger small d-none flex-grow-1" id="renameError"></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="renameConfirmBtn">Rename</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Move file -->
+<div class="modal fade" id="moveModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">Move to folder</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label small text-muted mb-1">Destination path</label>
+        <input type="text" id="moveInput" class="form-control form-control-sm font-monospace" autocomplete="off">
+      </div>
+      <div class="modal-footer py-2">
+        <div class="text-danger small d-none flex-grow-1" id="moveError"></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="moveConfirmBtn">Move</button>
       </div>
     </div>
   </div>

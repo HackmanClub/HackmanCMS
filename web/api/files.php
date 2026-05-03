@@ -100,6 +100,48 @@ if ($action === 'read') {
     exit;
 }
 
+// ── RENAME ────────────────────────────────────────────────────────────────────
+if ($action === 'rename' && $method === 'POST') {
+    $oldPath = $input['path'] ?? '';
+    $newName = basename($input['newName'] ?? '');
+    if (!$oldPath || !$newName) { echo json_encode(['error' => 'path and newName required']); exit; }
+    $abs = safeTarget($base, $oldPath);
+    if ($abs === false || !is_file($abs)) { http_response_code(403); echo json_encode(['error' => 'Access denied']); exit; }
+    $newAbs = dirname($abs) . '/' . $newName;
+    if (file_exists($newAbs) && realpath($newAbs) !== $abs) { echo json_encode(['error' => 'File already exists']); exit; }
+    rename($abs, $newAbs);
+    $newRel = ltrim(str_replace($base, '', $newAbs), '/');
+    Audit::log($db, 'file_rename', $project_id, $oldPath . ' → ' . $newRel);
+    echo json_encode(['ok' => true, 'newPath' => $newRel]);
+    exit;
+}
+
+// ── MOVE ──────────────────────────────────────────────────────────────────────
+if ($action === 'move' && $method === 'POST') {
+    $oldPath = $input['path'] ?? '';
+    $newPath = $input['newPath'] ?? '';
+    if (!$oldPath || !$newPath) { echo json_encode(['error' => 'path and newPath required']); exit; }
+    $abs = safeTarget($base, $oldPath);
+    if ($abs === false || !is_file($abs)) { http_response_code(403); echo json_encode(['error' => 'Access denied']); exit; }
+    // Normalize destination: strip traversal components
+    $destParts = explode('/', ltrim($newPath, '/'));
+    $norm = [];
+    foreach ($destParts as $p) {
+        if ($p === '..') array_pop($norm);
+        elseif ($p !== '' && $p !== '.') $norm[] = $p;
+    }
+    $newAbs = $base . '/' . implode('/', $norm);
+    if (!str_starts_with($newAbs . '/', $base . '/')) { http_response_code(403); echo json_encode(['error' => 'Access denied']); exit; }
+    if (file_exists($newAbs) && realpath($newAbs) !== $abs) { echo json_encode(['error' => 'File already exists at destination']); exit; }
+    $newDir = dirname($newAbs);
+    if (!is_dir($newDir)) mkdir($newDir, 0755, true);
+    rename($abs, $newAbs);
+    $newRel = ltrim(str_replace($base, '', $newAbs), '/');
+    Audit::log($db, 'file_move', $project_id, $oldPath . ' → ' . $newRel);
+    echo json_encode(['ok' => true, 'newPath' => $newRel]);
+    exit;
+}
+
 // ── LIST (default) ────────────────────────────────────────────────────────────
 if ($target === false || !is_dir($target)) { echo json_encode(['error' => 'Not a directory']); exit; }
 

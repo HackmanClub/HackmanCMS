@@ -319,7 +319,6 @@ function _closeTab(id) {
   if (idx === -1) return;
   if (_tabCMs[id]) { try { _tabCMs[id].toTextArea(); } catch(e) {} delete _tabCMs[id]; }
   delete _tabMdMounts[id];
-  if (_tabFmCMs[id]) { try { _tabFmCMs[id].toTextArea(); } catch (e) {} delete _tabFmCMs[id]; }
   if (_tabMdReflowers[id]) {
     try { _tabMdReflowers[id].disconnect(); } catch (e) {}
     delete _tabMdReflowers[id];
@@ -440,13 +439,6 @@ function _reflowMdEditor(id) {
     taSrc.style.height    = editorMinH + 'px';
   }
 
-  // FM editor (when visible) fills the same body slot
-  const fmContainer = wrap.querySelector('.ie-mk-fm');
-  const fmCM        = _tabFmCMs[id];
-  if (fmContainer && fmContainer.style.display !== 'none' && fmCM) {
-    fmContainer.style.height = bodyH + 'px';
-    try { fmCM.setSize('100%', bodyH + 'px'); } catch (e) {}
-  }
 }
 
 async function _openMdEditorTab(pid, path, name, content, isDraft) {
@@ -454,12 +446,12 @@ async function _openMdEditorTab(pid, path, name, content, isDraft) {
   if (!tabContent) return;
 
   const id = 'tab' + (++_tabCounter);
-  // Split content into FM + body. FM goes into a separate CodeMirror toggled
-  // via the FM button on mk-mount's toolbar; body goes into Milkdown. On save
-  // they are merged back so the file round-trips byte-identical.
   const { fm, body, photos } = _parseMdSource(content);
-  const hadFm = content.startsWith('---');
-  _tabs.push({ id, pid, path, name, kind: 'md-editor', isDraft, dirty: false, hadFm });
+  const hadFm    = content.startsWith('---');
+  const isHexo   = path.startsWith('source/_posts/') || path.startsWith('source/_drafts/');
+  const useFmBlock = hadFm || isHexo;
+
+  _tabs.push({ id, pid, path, name, kind: 'md-editor', isDraft, dirty: false });
   _renderTabBar();
 
   const div = document.createElement('div');
@@ -474,26 +466,22 @@ async function _openMdEditorTab(pid, path, name, content, isDraft) {
     </button>`;
   tabContent.appendChild(div);
 
-  // Mount Milkdown over the FULL document (front matter included). The
-  // frontmatter plugin renders the YAML block as code at the top of the
-  // editor — no separate CodeMirror, no merge-on-save dance. Image URLs are
-  // kept as authored; only the rendered <img>.src is rewritten via the
-  // observer below so ProseMirror's model stays clean.
   const mountEl = div.querySelector('#paneEditor-' + id);
   const ta = document.createElement('textarea');
   ta.className = 'mk-mount';
-  ta.value = body;       // body only — FM is edited separately
+  // FM lives as the first fenced yaml code block inside Milkdown.
+  // On save the block is extracted and serialised back to ---\nfm\n--- form.
+  ta.value = useFmBlock ? '```yaml\n' + fm + '\n```\n\n' + body : body;
+  ta.dataset.hasFmBlock = useFmBlock ? '1' : '0';
   mountEl.appendChild(ta);
   ta.onMkInput = () => _markDirty(id);
   _tabMdMounts[id] = ta;
 
-  // Recompute editor height on every layout-affecting change.
   const ro = new ResizeObserver(() => _reflowMdEditor(id));
   ro.observe(mountEl);
   _tabMdReflowers[id] = ro;
 
   ta.addEventListener('mk-mounted', () => {
-    _injectFmEditor(id, fm, pid);
     _injectMkToolbarExtras(id, pid, path, isDraft);
     _reflowMdEditor(id);
   });
@@ -515,7 +503,6 @@ async function _openMdEditorTab(pid, path, name, content, isDraft) {
 
   div.querySelector('#paneSaveBtn-' + id).addEventListener('click', () => _paneTabSave(id));
 
-  // Ctrl/Cmd+S anywhere in the pane saves.
   div.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
       e.preventDefault();
@@ -527,72 +514,7 @@ async function _openMdEditorTab(pid, path, name, content, isDraft) {
   requestAnimationFrame(() => requestAnimationFrame(() => _reflowMdEditor(id)));
 }
 
-// Refresh the photos banner from the FM CodeMirror's current value.
-function _refreshPhotosBanner(id, pid) {
-  const fmCM = _tabFmCMs[id];
-  const banner = document.querySelector('#tc-' + id + ' .md-photos-banner');
-  if (!banner) return;
-  const fmText = fmCM ? fmCM.getValue() : '';
-  const { photos } = _parseMdSource('---\n' + fmText + '\n---\n');
-  _renderPhotosBanner(banner, photos, pid);
-}
 
-// Inject the FM CodeMirror as a sibling of .ie-mk-body (hidden by default)
-// plus an "FM" toggle button on the mk-mount toolbar.
-function _injectFmEditor(id, initialFm, pid) {
-  const root = document.getElementById('tc-' + id);
-  if (!root) return;
-  const wrap   = root.querySelector('.mk-mount-wrap');
-  const ieBody = wrap?.querySelector('.ie-mk-body');
-  const tb     = wrap?.querySelector('.ie-mk-toolbar');
-  if (!wrap || !ieBody || !tb || _tabFmCMs[id]) return;
-
-  // FM container — hidden by default, slots in alongside .ie-mk-body
-  const fmContainer = document.createElement('div');
-  fmContainer.className = 'ie-mk-fm';
-  fmContainer.style.display = 'none';
-  wrap.insertBefore(fmContainer, ieBody.nextSibling);
-
-  const fmCM = CodeMirror(fmContainer, {
-    value: initialFm, mode: 'yaml', theme: 'dracula',
-    lineNumbers: true, lineWrapping: true, tabSize: 2,
-    extraKeys: { 'Ctrl-S': () => _paneTabSave(id), 'Cmd-S': () => _paneTabSave(id) },
-  });
-  fmCM.on('change', () => {
-    _markDirty(id);
-    _refreshPhotosBanner(id, pid);
-  });
-  _tabFmCMs[id] = fmCM;
-
-  // FM toggle on the editor toolbar (next to mk-mount's MD button)
-  const fmBtn = document.createElement('button');
-  fmBtn.type = 'button';
-  fmBtn.className = 'btn btn-sm btn-outline-secondary mk-fm-toggle';
-  fmBtn.title = 'Edit front matter (YAML)';
-  fmBtn.innerHTML = '<i class="bi bi-front"></i> FM';
-  const mkMode = tb.querySelector('.mk-mode');
-  if (mkMode) tb.insertBefore(fmBtn, mkMode);
-  else        tb.appendChild(fmBtn);
-
-  fmBtn.addEventListener('click', () => {
-    const showingFm = fmContainer.style.display !== 'none';
-    if (showingFm) {
-      fmContainer.style.display = 'none';
-      ieBody.style.display = '';
-      fmBtn.classList.remove('active');
-    } else {
-      ieBody.style.display = 'none';
-      fmContainer.style.display = '';
-      fmBtn.classList.add('active');
-      requestAnimationFrame(() => fmCM.refresh());
-    }
-    _reflowMdEditor(id);
-  });
-}
-
-// Inject the kebab (Delete + Publish) at the right end of mk-mount's toolbar
-// — keeps it in the editor's own row instead of squatting between the file
-// tab strip and the editor canvas.
 function _injectMkToolbarExtras(id, pid, path, isDraft) {
   const root = document.getElementById('tc-' + id);
   if (!root) return;
@@ -612,12 +534,33 @@ function _injectMkToolbarExtras(id, pid, path, isDraft) {
     </button>
     <ul class="dropdown-menu dropdown-menu-end">
       ${publishItem}
+      <li><button class="dropdown-item" id="paneRenameBtn-${id}">
+        <i class="bi bi-pencil me-2"></i>Rename
+      </button></li>
+      <li><button class="dropdown-item" id="paneMoveBtn-${id}">
+        <i class="bi bi-folder-symlink me-2"></i>Move
+      </button></li>
+      <li><hr class="dropdown-divider"></li>
       <li><button class="dropdown-item text-danger" id="paneDeleteBtn-${id}">
         <i class="bi bi-trash me-2"></i>Delete
       </button></li>
     </ul>`;
   tb.appendChild(wrap);
   wrap.querySelector('#paneDeleteBtn-' + id).addEventListener('click', () => _paneTabDelete(id));
+  wrap.querySelector('#paneRenameBtn-' + id).addEventListener('click', () => {
+    promptRename(pid, path, newPath => {
+      const tab = _tabs.find(t => t.id === id);
+      if (tab) { tab.path = newPath; tab.name = newPath.split('/').pop(); _renderTabBar(); }
+      if (document.getElementById('postsPanel')) _postsLoadFn(window._postsCurrentType || 'post');
+    });
+  });
+  wrap.querySelector('#paneMoveBtn-' + id).addEventListener('click', () => {
+    promptMove(pid, path, newPath => {
+      const tab = _tabs.find(t => t.id === id);
+      if (tab) { tab.path = newPath; _renderTabBar(); }
+      if (document.getElementById('postsPanel')) _postsLoadFn(window._postsCurrentType || 'post');
+    });
+  });
   if (isDraft) {
     wrap.querySelector('#panePublishBtn-' + id)?.addEventListener('click', () => _paneTabPublish(id, pid, path));
   }
@@ -709,14 +652,15 @@ async function _paneTabSave(id) {
   if (tab.kind === 'md-editor') {
     const mount = _tabMdMounts[id];
     if (!mount?.mkMount) { showError('Editor not ready'); return; }
-    const body  = mount.mkMount.getContent() ?? '';
-    const fmCM  = _tabFmCMs[id];
-    const fm    = fmCM ? fmCM.getValue() : '';
-    const fmTrimmed = fm.replace(/^\n+|\n+$/g, '');
-    if (tab.hadFm || fmTrimmed) {
-      content = '---\n' + fmTrimmed + '\n---\n\n' + body;
+    const md = mount.mkMount.getContent() ?? '';
+    // FM lives as the first ```yaml block; extract it and convert to ---\n...\n---
+    const fmMatch = md.match(/^```yaml\r?\n([\s\S]*?)\n?```(\r?\n|$)/);
+    if (fmMatch) {
+      const fm   = fmMatch[1];
+      const body = md.substring(fmMatch[0].length).replace(/^\s*\n/, '');
+      content = '---\n' + fm + '\n---\n\n' + body;
     } else {
-      content = body;
+      content = md;
     }
   } else {
     if (!_tabCMs[id]) return;
@@ -779,11 +723,66 @@ async function _paneTabPublish(id, pid, path) {
     if (data.ok) {
       showSuccess('Published!');
       _closeTab(id);
-      _postsLoadFn('draft');
+      _postsLoadFn('post');
     } else {
       showError(data.error || 'Publish failed');
     }
   });
+}
+
+function promptRename(pid, path, onSuccess) {
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('renameModal'));
+  const input = document.getElementById('renameInput');
+  const err   = document.getElementById('renameError');
+  input.value = path.split('/').pop();
+  err.classList.add('d-none');
+
+  const confirm = async () => {
+    const newName = input.value.trim();
+    if (!newName) { err.textContent = 'Name required'; err.classList.remove('d-none'); return; }
+    const res  = await fetch('/api/files?project_id=' + pid, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: 'rename', path, newName }),
+    });
+    const data = await res.json();
+    if (!data.ok) { err.textContent = data.error || 'Error'; err.classList.remove('d-none'); return; }
+    modal.hide();
+    showSuccess('Renamed');
+    onSuccess(data.newPath);
+  };
+  document.getElementById('renameConfirmBtn').onclick = confirm;
+  input.onkeydown = e => { if (e.key === 'Enter') confirm(); };
+  modal.show();
+  setTimeout(() => { input.select(); }, 300);
+}
+
+function promptMove(pid, path, onSuccess) {
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('moveModal'));
+  const input = document.getElementById('moveInput');
+  const err   = document.getElementById('moveError');
+  const parts = path.split('/');
+  parts.pop();
+  input.value = parts.join('/') + '/';
+  err.classList.add('d-none');
+
+  const confirm = async () => {
+    const dir  = input.value.trim().replace(/\/$/, '');
+    const file = path.split('/').pop();
+    const newPath = dir + '/' + file;
+    const res  = await fetch('/api/files?project_id=' + pid, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: 'move', path, newPath }),
+    });
+    const data = await res.json();
+    if (!data.ok) { err.textContent = data.error || 'Error'; err.classList.remove('d-none'); return; }
+    modal.hide();
+    showSuccess('Moved');
+    onSuccess(data.newPath);
+  };
+  document.getElementById('moveConfirmBtn').onclick = confirm;
+  input.onkeydown = e => { if (e.key === 'Enter') confirm(); };
+  modal.show();
+  setTimeout(() => { const l = input.value.length; input.setSelectionRange(l, l); input.focus(); }, 300);
 }
 
 // Modal editor (used from posts pane where there's no tab bar)
@@ -987,9 +986,15 @@ function countTreePosts(node) {
 }
 
 function renderPostItem(p, pid, type) {
-  const rel = esc(p.relpath);
+  const rel  = esc(p.relpath);
+  const path = esc(p.path);
+  const publishItem = type === 'draft'
+    ? `<li><button class="dropdown-item small btn-pub-post" data-relpath="${rel}" data-path="${path}">
+         <i class="bi bi-send me-2"></i>Publish
+       </button></li><li><hr class="dropdown-divider"></li>`
+    : '';
   return `<div class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-1 px-2 post-item-row"
-    data-path="${esc(p.path)}" data-name="${esc(p.filename)}"
+    data-path="${path}" data-name="${esc(p.filename)}"
     data-relpath="${rel}" data-type="${esc(type)}" style="cursor:pointer">
     <div class="flex-grow-1 min-w-0">
       <div class="text-truncate small">${esc(p.title)}</div>
@@ -1000,8 +1005,15 @@ function renderPostItem(p, pid, type) {
         <i class="bi bi-three-dots-vertical"></i>
       </button>
       <ul class="dropdown-menu dropdown-menu-end">
+        ${publishItem}
         <li><button class="dropdown-item small btn-dup-post" data-relpath="${rel}" data-type="${esc(type)}">
           <i class="bi bi-copy me-2"></i>Duplicate
+        </button></li>
+        <li><button class="dropdown-item small btn-rename-post" data-path="${path}">
+          <i class="bi bi-pencil me-2"></i>Rename
+        </button></li>
+        <li><button class="dropdown-item small btn-move-post" data-path="${path}">
+          <i class="bi bi-folder-symlink me-2"></i>Move
         </button></li>
         <li><hr class="dropdown-divider"></li>
         <li><button class="dropdown-item small text-danger btn-del-post" data-relpath="${rel}" data-type="${esc(type)}">
@@ -1065,6 +1077,39 @@ function _wirePostList(list, pid, currentTypeRef) {
       d.ok ? (showSuccess('Duplicated as ' + d.relpath), _postsLoadFn(currentTypeRef.type)) : showError(d.error || 'Error');
     });
   });
+  list.querySelectorAll('.btn-pub-post').forEach(btn => {
+    btn.addEventListener('click', () => confirmAction('Publish draft to _posts?', async () => {
+      const res = await fetch('/api/posts?project_id=' + pid, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action: 'publish', relpath: btn.dataset.relpath }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        showSuccess('Published!');
+        const tab = _tabs.find(t => t.path === btn.dataset.path);
+        if (tab) _closeTab(tab.id);
+        _postsLoadFn('post');
+      } else { showError(d.error || 'Error'); }
+    }));
+  });
+  list.querySelectorAll('.btn-rename-post').forEach(btn => {
+    btn.addEventListener('click', () => {
+      promptRename(pid, btn.dataset.path, newPath => {
+        const tab = _tabs.find(t => t.path === btn.dataset.path);
+        if (tab) { tab.path = newPath; tab.name = newPath.split('/').pop(); _renderTabBar(); }
+        _postsLoadFn(currentTypeRef.type);
+      });
+    });
+  });
+  list.querySelectorAll('.btn-move-post').forEach(btn => {
+    btn.addEventListener('click', () => {
+      promptMove(pid, btn.dataset.path, newPath => {
+        const tab = _tabs.find(t => t.path === btn.dataset.path);
+        if (tab) { tab.path = newPath; _renderTabBar(); }
+        _postsLoadFn(currentTypeRef.type);
+      });
+    });
+  });
 }
 
 // Shared reference so modal "Create" button can reload the list
@@ -1080,7 +1125,7 @@ if (postsPanel) {
   _postsLoadFn = type => loadPostsByType(type);
 
   function setActiveBtn(btnId) {
-    ['showPosts','showPages','showDrafts'].forEach(id => {
+    ['showPosts','showPages'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.classList.toggle('btn-outline-primary',   id === btnId);
@@ -1125,35 +1170,79 @@ if (postsPanel) {
   }
 
   async function loadPostsByType(type) {
+    // Drafts are merged into the posts view — always normalise to 'post'
+    if (type === 'draft') type = 'post';
     currentType = type;
     window._postsCurrentType = type;
-    setActiveBtn(type === 'page' ? 'showPages' : type === 'draft' ? 'showDrafts' : 'showPosts');
+    setActiveBtn(type === 'page' ? 'showPages' : 'showPosts');
     const sq = document.getElementById('searchQuery');
     if (sq) sq.value = '';
     searchResults.classList.add('d-none');
     postsList.classList.remove('d-none');
     postsList.innerHTML = '<div class="text-muted small">Loading…</div>';
-    const res  = await fetch(`/api/posts?project_id=${pid}&type=${type}`);
-    const data = await res.json();
-    if (data.missing_dir) {
-      const dirs = { post: 'source/_posts/', page: 'source/', draft: 'source/_drafts/' };
-      postsList.innerHTML = `<div class="text-muted small"><code>${dirs[type] ?? type}</code> not found.</div>`;
+
+    if (type === 'post') {
+      // Fetch posts + drafts together
+      const [pr, dr] = await Promise.all([
+        fetch(`/api/posts?project_id=${pid}&type=post`),
+        fetch(`/api/posts?project_id=${pid}&type=draft`),
+      ]);
+      const [postsData, draftsData] = await Promise.all([pr.json(), dr.json()]);
+
+      const posts  = _applyFilter(postsData.items  || []);
+      const drafts = _applyFilter(draftsData.items || []);
+
+      if (!posts.length && !drafts.length) {
+        postsList.innerHTML = `<div class="text-muted small">${_activeFilter ? 'No posts match this filter.' : 'No posts yet.'}</div>`;
+        _renderFilterBar();
+        return;
+      }
+
+      let html = '';
+      if (drafts.length) {
+        _postFolderCounter = 0;
+        const draftTree = renderPostTree(buildPostTree(drafts), pid, 'draft');
+        html += `<div class="mb-2">
+          <div class="post-section-header" data-bs-toggle="collapse" data-bs-target="#vfDrafts" aria-expanded="false">
+            <i class="bi bi-chevron-right post-section-chevron"></i>
+            <i class="bi bi-pencil-square me-1" style="font-size:.75rem;opacity:.7"></i>
+            <span class="flex-grow-1">Drafts</span>
+            <span class="badge bg-secondary" style="font-size:.7rem;font-weight:400">${drafts.length}</span>
+          </div>
+          <div class="collapse ps-2" id="vfDrafts">
+            <div class="posts-tree">${draftTree}</div>
+          </div>
+        </div>`;
+      }
+      if (posts.length) {
+        const expandPath = posts[0]?.folder ? posts[0].folder.split('/').filter(Boolean) : [];
+        _postFolderCounter = 0;
+        html += `<div class="posts-tree">${renderPostTree(buildPostTree(posts), pid, 'post', expandPath)}</div>`;
+      }
+      postsList.innerHTML = html;
+      _wirePostList(postsList, pid, { type: 'post' });
       _renderFilterBar();
-      return;
-    }
-    const items = _applyFilter(data.items);
-    if (!items.length) {
-      postsList.innerHTML = `<div class="text-muted small">${
-        _activeFilter ? `No ${type}s match this filter.` : `No ${type}s yet.`
-      }</div>`;
+    } else {
+      // Pages
+      const res  = await fetch(`/api/posts?project_id=${pid}&type=${type}`);
+      const data = await res.json();
+      if (data.missing_dir) {
+        postsList.innerHTML = `<div class="text-muted small"><code>source/</code> not found.</div>`;
+        _renderFilterBar();
+        return;
+      }
+      const items = _applyFilter(data.items || []);
+      if (!items.length) {
+        postsList.innerHTML = `<div class="text-muted small">${_activeFilter ? 'No pages match this filter.' : 'No pages yet.'}</div>`;
+        _renderFilterBar();
+        return;
+      }
+      const expandPath = items[0]?.folder ? items[0].folder.split('/').filter(Boolean) : [];
+      _postFolderCounter = 0;
+      postsList.innerHTML = `<div class="posts-tree">${renderPostTree(buildPostTree(items), pid, type, expandPath)}</div>`;
+      _wirePostList(postsList, pid, { type });
       _renderFilterBar();
-      return;
     }
-    const expandPath = items[0]?.folder ? items[0].folder.split('/').filter(Boolean) : [];
-    _postFolderCounter = 0;
-    postsList.innerHTML = `<div class="posts-tree">` + renderPostTree(buildPostTree(items), pid, type, expandPath) + `</div>`;
-    _wirePostList(postsList, pid, { type });
-    _renderFilterBar();
   }
 
   // Read ?filter=tag:foo or ?filter=category:bar from URL
@@ -1167,269 +1256,49 @@ if (postsPanel) {
 
   document.getElementById('showPosts')?.addEventListener('click',  () => loadPostsByType('post'));
   document.getElementById('showPages')?.addEventListener('click',  () => loadPostsByType('page'));
-  document.getElementById('showDrafts')?.addEventListener('click', () => {
-    currentType = 'draft';
-    window._postsCurrentType = 'draft';
-    setActiveBtn('showDrafts');
-    const sq = document.getElementById('searchQuery');
-    if (sq) sq.value = '';
-    searchResults.classList.add('d-none');
-    postsList.classList.remove('d-none');
-    loadDraftsList();
-  });
+
+  let _newTypeTarget = 'post';
+
+  function openNewPostModal(type) {
+    _newTypeTarget = type;
+    const labels = { post: 'New Post', draft: 'New Draft', page: 'New Page' };
+    document.getElementById('newPostModalTitle').textContent = labels[type] ?? 'New';
+    document.getElementById('newPostTitle').value  = '';
+    document.getElementById('newPostFolder').value = '';
+    document.getElementById('newPostError').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('newPostModal')).show();
+    setTimeout(() => document.getElementById('newPostTitle').focus(), 300);
+  }
 
   document.getElementById('newItemBtn')?.addEventListener('click', () => {
-    createNewDraft();
+    openNewPostModal(currentType === 'page' ? 'page' : 'post');
   });
 
-  async function loadDraftsList() {
-    postsList.innerHTML = '<div class="text-muted small">Loading…</div>';
-    const res  = await fetch(`/api/drafts?project_id=${pid}`);
-    const data = await res.json();
-    if (!data.drafts?.length) {
-      postsList.innerHTML = '<div class="text-muted small">No drafts yet.</div>';
-      return;
-    }
-    postsList.innerHTML = data.drafts.map(d => `
-      <div class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-1 px-2 draft-list-row"
-           data-id="${d.id}" style="cursor:pointer">
-        <div class="flex-grow-1 min-w-0">
-          <div class="text-truncate small">${esc(d.title || 'Untitled')}</div>
-          <small class="text-muted">${esc((d.updated_at ?? '').substring(0,10))}
-            ${d.folder ? ' &bull; <code class="small">' + esc(d.folder) + '</code>' : ''}</small>
-        </div>
-        <div class="dropdown flex-shrink-0">
-          <button class="btn btn-xs btn-outline-secondary border-0 px-1" data-bs-toggle="dropdown"
-                  aria-expanded="false" title="More">
-            <i class="bi bi-three-dots-vertical"></i>
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li><button class="dropdown-item small btn-publish-draft" data-id="${d.id}">
-              <i class="bi bi-send me-2"></i>Publish
-            </button></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><button class="dropdown-item small text-danger btn-del-draft" data-id="${d.id}">
-              <i class="bi bi-trash me-2"></i>Delete
-            </button></li>
-          </ul>
-        </div>
-      </div>`).join('');
+  postsPanel.querySelectorAll('.new-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => openNewPostModal(btn.dataset.type));
+  });
 
-    postsList.querySelectorAll('.draft-list-row').forEach(row => {
-      row.addEventListener('click', ev => {
-        if (ev.target.closest('button')) return;
-        const d = data.drafts.find(x => x.id === parseInt(row.dataset.id));
-        if (d) openDraftInTab(d);
-      });
-    });
-    postsList.querySelectorAll('.btn-del-draft').forEach(btn => {
-      btn.addEventListener('click', () => confirmAction('Delete this draft?', async () => {
-        const r = await fetch('/api/drafts', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ action: 'delete', id: parseInt(btn.dataset.id), project_id: parseInt(pid) }),
-        });
-        const d = await r.json();
-        if (d.ok) {
-          const tab = _tabs.find(t => t.kind === 'draft' && t.draftId === parseInt(btn.dataset.id));
-          if (tab) _closeTab(tab.id);
-          loadDraftsList();
-        } else showError(d.error || 'Error');
-      }));
-    });
-    postsList.querySelectorAll('.btn-publish-draft').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const r = await fetch('/api/drafts', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ action: 'publish', id: parseInt(btn.dataset.id), project_id: parseInt(pid) }),
-        });
-        const d = await r.json();
-        if (d.ok) {
-          showSuccess('Published as ' + (d.path || d.filename || 'post'));
-          const tab = _tabs.find(t => t.kind === 'draft' && t.draftId === parseInt(btn.dataset.id));
-          if (tab) _closeTab(tab.id);
-          loadDraftsList();
-        } else showError(d.error || 'Error');
-      });
-    });
-  }
-
-  async function createNewDraft() {
-    const res  = await fetch('/api/drafts', {
+  document.getElementById('newPostCreateBtn')?.addEventListener('click', async () => {
+    const title   = document.getElementById('newPostTitle').value.trim();
+    const folder  = document.getElementById('newPostFolder').value.trim();
+    const errEl   = document.getElementById('newPostError');
+    if (!title) { errEl.textContent = 'Title required'; errEl.classList.remove('d-none'); return; }
+    const date = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const fm   = `---\ntitle: "${title.replace(/"/g, '\\"')}"\ndate: ${date}\ntags: []\n---`;
+    const res  = await fetch('/api/posts?project_id=' + pid, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ action: 'create', project_id: parseInt(pid), title: 'New draft' }),
+      body: JSON.stringify({ type: _newTypeTarget, title, folder, frontmatter: fm }),
     });
     const data = await res.json();
-    if (!data.ok) { showError(data.error || 'Error'); return; }
-    await loadDraftsList();
-    const r2  = await fetch(`/api/drafts?project_id=${pid}`);
-    const d2  = await r2.json();
-    const newD = d2.drafts?.find(x => x.id === data.id);
-    if (newD) openDraftInTab(newD);
-  }
+    if (!data.ok) { errEl.textContent = data.error || 'Error'; errEl.classList.remove('d-none'); return; }
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('newPostModal')).hide();
+    await loadPostsByType('post');
+    openFileEditor(pid, data.path, data.filename);
+  });
 
-  function openDraftInTab(draft) {
-    const existing = _tabs.find(t => t.kind === 'draft' && t.draftId === draft.id);
-    if (existing) { _switchTab(existing.id); return; }
-
-    const id = 'tab' + (++_tabCounter);
-    _tabs.push({
-      id, pid, path: null, name: draft.title || 'Untitled',
-      kind: 'draft', draftId: draft.id, dirty: false,
-    });
-    _renderTabBar();
-
-    const div = document.createElement('div');
-    div.id = 'tc-' + id;
-    div.style.height = '100%';
-    div.style.display = 'none';
-    div.style.position = 'relative';
-    div.innerHTML = `
-      <div class="d-flex align-items-center gap-2 px-2 py-1 flex-shrink-0 flex-wrap draft-meta-row" style="min-height:42px">
-        <input type="text" id="dtTitle-${id}" class="form-control form-control-sm" placeholder="Title"
-               value="${esc(draft.title || '')}" style="max-width:240px">
-        <input type="text" id="dtSlug-${id}" class="form-control form-control-sm font-monospace" placeholder="slug"
-               value="${esc(draft.slug || '')}" style="max-width:140px">
-        <div class="input-group input-group-sm" style="max-width:180px">
-          <span class="input-group-text font-monospace" style="font-size:.75rem;padding:.2rem .35rem;color:var(--hm-muted)">_posts/</span>
-          <input type="text" id="dtFolder-${id}" class="form-control form-control-sm font-monospace" placeholder="2026"
-                 value="${esc(draft.folder || '')}">
-        </div>
-      </div>
-      <div class="md-editor-mount" id="paneEditor-${id}" style="flex:1;min-height:0"></div>
-      <button class="md-pane-save d-none" id="paneSaveBtn-${id}" title="Save (Ctrl+S)">
-        <i class="bi bi-floppy me-1"></i>Save
-      </button>`;
-    document.getElementById('editorTabContent').appendChild(div);
-
-    // Auto-slug from title (kept from original)
-    div.querySelector('#dtTitle-' + id)?.addEventListener('input', (e) => {
-      const slug = e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      const slugEl = div.querySelector('#dtSlug-' + id);
-      if (slugEl && !slugEl.dataset.userEdited) slugEl.value = slug;
-      _markDirty(id);
-    });
-    ['#dtSlug-', '#dtFolder-'].forEach(prefix => {
-      div.querySelector(prefix + id)?.addEventListener('input', function () {
-        this.dataset.userEdited = '1';
-        _markDirty(id);
-      });
-    });
-
-    // Milkdown body
-    const mountEl = div.querySelector('#paneEditor-' + id);
-    const ta = document.createElement('textarea');
-    ta.className = 'mk-mount';
-    ta.value = draft.body || '';
-    mountEl.appendChild(ta);
-    ta.onMkInput = () => _markDirty(id);
-    _tabMdMounts[id] = ta;
-
-    const ro = new ResizeObserver(() => _reflowMdEditor(id));
-    ro.observe(mountEl);
-    _tabMdReflowers[id] = ro;
-
-    ta.addEventListener('mk-mounted', () => {
-      _injectDraftKebab(id, pid, draft.id);
-      _reflowMdEditor(id);
-    });
-    ta.addEventListener('mk-ready', () => {
-      _reflowMdEditor(id);
-      _attachImgSrcRewriter(id, pid);
-    });
-
-    div.querySelector('#paneSaveBtn-' + id).addEventListener('click', () => saveDraftTab(id));
-    div.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        saveDraftTab(id);
-      }
-    });
-
-    _switchTab(id);
-    requestAnimationFrame(() => requestAnimationFrame(() => _reflowMdEditor(id)));
-  }
-
-  // Kebab in mk-mount's toolbar — Publish + Delete for drafts.
-  function _injectDraftKebab(id, pid, draftId) {
-    const root = document.getElementById('tc-' + id);
-    const tb = root?.querySelector('.ie-mk-toolbar');
-    if (!tb || tb.querySelector('.mk-pane-kebab')) return;
-    const wrap = document.createElement('div');
-    wrap.className = 'dropdown mk-pane-kebab ms-1';
-    wrap.innerHTML = `
-      <button class="btn btn-sm btn-outline-secondary border-0" data-bs-toggle="dropdown" aria-expanded="false" title="More">
-        <i class="bi bi-three-dots-vertical"></i>
-      </button>
-      <ul class="dropdown-menu dropdown-menu-end">
-        <li><button class="dropdown-item" id="dtPublishBtn-${id}">
-          <i class="bi bi-send me-2"></i>Publish
-        </button></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><button class="dropdown-item text-danger" id="dtDeleteBtn-${id}">
-          <i class="bi bi-trash me-2"></i>Delete
-        </button></li>
-      </ul>`;
-    tb.appendChild(wrap);
-    wrap.querySelector('#dtPublishBtn-' + id).addEventListener('click', () => publishDraftTab(id));
-    wrap.querySelector('#dtDeleteBtn-' + id).addEventListener('click', () => {
-      confirmAction('Delete this draft?', async () => {
-        const r = await fetch('/api/drafts', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ action: 'delete', id: draftId, project_id: parseInt(pid) }),
-        });
-        const d = await r.json();
-        if (d.ok) { showSuccess('Deleted'); _closeTab(id); loadDraftsList(); }
-        else showError(d.error || 'Error');
-      });
-    });
-  }
-
-  async function saveDraftTab(id) {
-    const tab = _tabs.find(t => t.id === id);
-    if (!tab || tab.kind !== 'draft') return;
-    const mount = _tabMdMounts[id];
-    if (!mount?.mkMount) { showError('Editor not ready'); return; }
-    const title  = document.getElementById('dtTitle-'  + id)?.value.trim() || '';
-    const slug   = document.getElementById('dtSlug-'   + id)?.value.trim() || '';
-    const folder = document.getElementById('dtFolder-' + id)?.value.trim() || '';
-    const body   = mount.mkMount.getContent() || '';
-    const res = await fetch('/api/drafts', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ action: 'update', id: tab.draftId, project_id: parseInt(pid), title, slug, folder, body }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      tab.dirty = false;
-      tab.name = title || 'Untitled';
-      showSuccess('Draft saved');
-      _renderTabBar();
-      _updateSaveBtnState(id);
-      loadDraftsList();
-    } else {
-      showError(data.error || 'Save failed');
-    }
-  }
-
-  async function publishDraftTab(id) {
-    const tab = _tabs.find(t => t.id === id);
-    if (!tab || tab.kind !== 'draft') return;
-    await saveDraftTab(id);
-    confirmAction('Publish draft to _posts?', async () => {
-      const res = await fetch('/api/drafts', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action: 'publish', id: tab.draftId, project_id: parseInt(pid) }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        showSuccess('Published: ' + data.filename);
-        _closeTab(id);
-        loadDraftsList();
-        _postsLoadFn('post');
-      } else {
-        showError(data.error || 'Publish failed');
-      }
-    });
-  }
+  document.getElementById('newPostTitle')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('newPostCreateBtn')?.click();
+  });
 
   let _searchTimer = null;
   document.getElementById('searchQuery')?.addEventListener('input', e => {
