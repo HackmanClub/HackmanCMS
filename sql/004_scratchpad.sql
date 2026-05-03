@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN scratchpad TEXT NOT NULL DEFAULT '';
