@@ -12,7 +12,7 @@ if (!$project) { http_response_code(404); echo json_encode(['error' => 'Project 
 $psStmt = $db->prepare('SELECT value FROM project_settings WHERE project_id = ? AND key = ?');
 $psStmt->execute([$pid, 'bot_log_file']);
 $row     = $psStmt->fetch();
-$rel     = $row ? $row['value'] : 'logs/bashybot.log';
+$rel     = $row ? $row['value'] : 'data/bashybot.log';
 
 $base    = realpath($project['path']);
 $logPath = realpath($base . '/' . ltrim($rel, '/'));

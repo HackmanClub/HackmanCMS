@@ -12,7 +12,7 @@ $project = $stmt->fetch();
 if (!$project) { http_response_code(404); echo json_encode(['error' => 'Project not found']); exit; }
 
 $base        = realpath($project['path']);
-$config_path = $base . '/config.json';
+$config_path = $base . '/data/config.json';
 
 if (!$base || !is_dir($base)) {
     echo json_encode(['error' => 'Project path not accessible']); exit;
