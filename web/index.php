@@ -15,6 +15,13 @@ if ($uri === '/api/auth') {
     exit;
 }
 
+// LinkedIn OAuth callback — session required but no full auth check
+// (LinkedIn redirects back here; user's browser session is active)
+if ($uri === '/linkedin/callback') {
+    include ROOT . '/web/linkedin_callback.php';
+    exit;
+}
+
 // All other routes require login
 Auth::requireLogin();
 ProjectTypes::load();

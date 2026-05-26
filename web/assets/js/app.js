@@ -2364,6 +2364,7 @@ if (addScanPathForm) {
     botconfig_mastodon_remove: 'mastodon removed',
     botconfig_linkedin_page_add: 'linkedin page added', botconfig_linkedin_page_save: 'linkedin page updated',
     botconfig_linkedin_page_remove: 'linkedin page removed',
+    linkedin_oauth_connect: 'linkedin connected',
     file_write: 'file edit', file_delete: 'file delete', file_upload: 'upload',
     post_create: 'post created', post_delete: 'post deleted',
     post_publish: 'post published', post_duplicate: 'post duplicated',
@@ -2399,6 +2400,7 @@ if (addScanPathForm) {
     botconfig_rss_add: 'bi-rss', botconfig_rss_save: 'bi-rss', botconfig_rss_remove: 'bi-rss',
     botconfig_mastodon_add: 'bi-mastodon', botconfig_mastodon_save: 'bi-mastodon', botconfig_mastodon_remove: 'bi-mastodon',
     botconfig_linkedin_page_add: 'bi-linkedin', botconfig_linkedin_page_save: 'bi-linkedin', botconfig_linkedin_page_remove: 'bi-linkedin',
+    linkedin_oauth_connect: 'bi-linkedin',
     file_write: 'bi-pencil', file_delete: 'bi-trash', file_upload: 'bi-cloud-upload',
     post_create: 'bi-file-earmark-plus', post_delete: 'bi-file-earmark-x',
     post_publish: 'bi-send', post_duplicate: 'bi-files',
@@ -3385,6 +3387,13 @@ window.addEventListener('DOMContentLoaded', () => {
     label.className = 'small fw-semibold ' + (connected ? 'text-success' : 'text-muted');
     expiry.textContent = li.token_expiry ? 'Expires: ' + li.token_expiry : '';
   }
+
+  document.getElementById('liConnectBtn').addEventListener('click', async () => {
+    const r = await fetch('/api/linkedin_auth?project_id=' + pid);
+    const d = await r.json();
+    if (d.error) { showError(d.error); return; }
+    window.location.href = d.url;
+  });
 
   function renderLinkedinPages(pages) {
     const list = document.getElementById('linkedinPagesList');

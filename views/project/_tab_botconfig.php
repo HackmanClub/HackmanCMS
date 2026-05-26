@@ -40,10 +40,9 @@
         <div class="small fw-semibold" id="liConnectionLabel">Checking…</div>
         <div class="text-muted small" id="liTokenExpiry"></div>
       </div>
-      <a href="#" class="btn btn-sm btn-outline-primary ms-auto disabled" id="liConnectBtn">
+      <button class="btn btn-sm btn-outline-primary ms-auto" id="liConnectBtn">
         <i class="bi bi-box-arrow-in-right me-1"></i>Connect LinkedIn
-        <span class="badge bg-secondary ms-1">coming soon</span>
-      </a>
+      </button>
     </div>
   </div>
 
