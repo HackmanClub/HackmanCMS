@@ -21,10 +21,10 @@ if ($method === 'GET') {
     $action = $_GET['action'] ?? 'status';
     if ($action !== 'status') { http_response_code(400); echo json_encode(['error' => 'Unknown action']); exit; }
 
-    exec('sudo systemctl is-active ' . escapeshellarg($service) . ' 2>&1', $activeOut, $activeCode);
+    exec('systemctl is-active ' . escapeshellarg($service) . ' 2>&1', $activeOut, $activeCode);
     $isActive = trim(implode('', $activeOut)) === 'active';
 
-    exec('sudo systemctl show ' . escapeshellarg($service) . ' --property=ActiveEnterTimestamp --value 2>&1', $tsOut);
+    exec('systemctl show ' . escapeshellarg($service) . ' --property=ActiveEnterTimestamp --value 2>&1', $tsOut);
     $since = trim(implode('', $tsOut));
 
     echo json_encode([
@@ -55,7 +55,7 @@ exec('sudo systemctl ' . $action . ' ' . escapeshellarg($service) . ' 2>&1', $ou
 Audit::log($db, 'bot_' . $action, $project_id, $service);
 
 // Return updated status after action
-exec('sudo systemctl is-active ' . escapeshellarg($service) . ' 2>&1', $activeOut);
+exec('systemctl is-active ' . escapeshellarg($service) . ' 2>&1', $activeOut);
 $isActive = trim(implode('', $activeOut)) === 'active';
 
 echo json_encode([
