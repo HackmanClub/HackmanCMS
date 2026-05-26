@@ -72,6 +72,8 @@ default — every type that doesn't override gets those four universal tabs.
 
 Universal (in default `ProjectTypeBase::tabs()`): `dashboard`, `analytics`, `files`, `notes`, `settings`.
 
+Discord Bot-only (in `DiscordBotProject::tabs()`): `bot`, `botconfig`, `logs`.
+
 Hexo-only (in `HexoProject::tabs()`): `posts`, `config`, `run`, `themes`, `plugins`, `git`.
 
 Storage-only: `media`.
@@ -154,6 +156,27 @@ Apache vhost locally:
 
 Add `127.0.0.1 hackmancms.local` to `/etc/hosts`.
 
+## Discord Bot integration (DiscordBotProject)
+
+Project type `discord-bot` manages a bashyBot instance. Auto-detected from a path containing `main.py` + `cogs/` + `config.json`.
+
+**Tabs:** `bot` (process control), `botconfig` (structured config.json editor), `logs` (log tail).
+
+**Bot control** (`web/api/botcontrol.php`) runs `sudo systemctl start|stop|restart|is-active|show <service>`.
+The service name is stored in `project_settings` as `bot_service_name` (default: `bashybot`).
+`www-data` requires passwordless sudo for these commands:
+
+```
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl start bashybot, /usr/bin/systemctl stop bashybot, /usr/bin/systemctl restart bashybot, /usr/bin/systemctl is-active bashybot, /usr/bin/systemctl show bashybot
+```
+
+**Config editor** (`web/api/botconfig.php`) reads/writes the project's `config.json` atomically (`.tmp` → rename).
+Supports: `add_streamer`, `save_streamer`, `remove_streamer`, `add_rss`, `save_rss`, `remove_rss`, `save_linkedin`.
+Never wipes existing tokens with an empty string submission.
+
+**Log viewer** (`web/api/botlogs.php`) tails the log file.
+Log path stored in `project_settings` as `bot_log_file` (default: `logs/bashybot.log`, relative to project path).
+
 ## Scheduled builds
 
 `bin/run-schedules.php` is a cron-driven dispatcher: it iterates `scheduled_builds`,
@@ -201,6 +224,8 @@ Currently logged action strings:
 | `web/api/templates.php`| `template_create`, `template_update`, `template_delete` (detail=name)                                  |
 | `web/api/snippets.php` | `snippet_create`, `snippet_update`, `snippet_delete` (detail=name)                                     |
 | `bin/run-schedules.php`| `scheduled_build` (detail=`cmd_id status=...`)                                                         |
+| `web/api/botcontrol.php` | `bot_start`, `bot_stop`, `bot_restart` (detail=service name)                                         |
+| `web/api/botconfig.php`  | `botconfig_streamer_add`, `botconfig_streamer_save`, `botconfig_streamer_remove` (detail=name), `botconfig_rss_add`, `botconfig_rss_save`, `botconfig_rss_remove` (detail=name), `botconfig_linkedin_save` |
 
 The activity feed renderer (`#activityFeed` in `app.js`) maps these to labels + icons
 in `ACTION_LABELS` / `ACTION_ICONS`. Unmapped actions still render — they just show the

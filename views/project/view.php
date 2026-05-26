@@ -39,6 +39,8 @@ $tabLabels = [
     'run'       => 'Run',       'themes'    => 'Themes',
     'plugins'   => 'Plugins',   'git'       => 'Git',
     'notes'     => 'Notes',     'settings'  => 'Settings',
+    'bot'       => 'Bot',       'botconfig' => 'Config',
+    'logs'      => 'Logs',
 ];
 $tabIcons = [
     'dashboard' => 'bi-grid-1x2',         'analytics' => 'bi-graph-up',
@@ -47,9 +49,12 @@ $tabIcons = [
     'run'       => 'bi-terminal',         'themes'    => 'bi-palette',
     'plugins'   => 'bi-puzzle',           'git'       => 'bi-git',
     'notes'     => 'bi-sticky',           'settings'  => 'bi-gear',
+    'bot'       => 'bi-robot',            'botconfig' => 'bi-sliders2',
+    'logs'      => 'bi-journal-text',
 ];
 $tabGroups = [
     ['dashboard', 'analytics'],
+    ['bot', 'botconfig', 'logs'],
     ['posts', 'config', 'files', 'media'],
     ['run', 'themes', 'plugins', 'git'],
     ['notes', 'settings'],
@@ -255,6 +260,15 @@ $tabGroups = [
     <div class="col-12 text-muted small">Loading…</div>
   </div>
 </div>
+
+<?php elseif ($tab === 'bot'): ?>
+<?php include ROOT . '/views/project/_tab_bot.php'; ?>
+
+<?php elseif ($tab === 'botconfig'): ?>
+<?php include ROOT . '/views/project/_tab_botconfig.php'; ?>
+
+<?php elseif ($tab === 'logs'): ?>
+<?php include ROOT . '/views/project/_tab_logs.php'; ?>
 
 <?php elseif ($tab === 'git'): ?>
 <?php include ROOT . '/views/project/_tab_git.php'; ?>

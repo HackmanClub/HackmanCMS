@@ -2355,6 +2355,15 @@ if (addScanPathForm) {
     theme_git_pull: 'theme pull', theme_git_push: 'theme push', theme_git_fetch: 'theme fetch',
     plugin_install: 'plugin install', plugin_uninstall: 'plugin uninstall',
     scheduled_build: 'scheduled build',
+    bot_start: 'bot started', bot_stop: 'bot stopped', bot_restart: 'bot restarted',
+    botconfig_streamer_add: 'streamer added', botconfig_streamer_save: 'streamer updated',
+    botconfig_streamer_remove: 'streamer removed',
+    botconfig_rss_add: 'feed added', botconfig_rss_save: 'feed updated',
+    botconfig_rss_remove: 'feed removed',
+    botconfig_mastodon_add: 'mastodon added', botconfig_mastodon_save: 'mastodon updated',
+    botconfig_mastodon_remove: 'mastodon removed',
+    botconfig_linkedin_page_add: 'linkedin page added', botconfig_linkedin_page_save: 'linkedin page updated',
+    botconfig_linkedin_page_remove: 'linkedin page removed',
     file_write: 'file edit', file_delete: 'file delete', file_upload: 'upload',
     post_create: 'post created', post_delete: 'post deleted',
     post_publish: 'post published', post_duplicate: 'post duplicated',
@@ -2384,6 +2393,12 @@ if (addScanPathForm) {
     theme_git_fetch: 'bi-arrow-repeat',
     plugin_install: 'bi-puzzle', plugin_uninstall: 'bi-puzzle',
     scheduled_build: 'bi-clock',
+    bot_start: 'bi-play-circle', bot_stop: 'bi-stop-circle', bot_restart: 'bi-arrow-clockwise',
+    botconfig_streamer_add: 'bi-twitch', botconfig_streamer_save: 'bi-twitch',
+    botconfig_streamer_remove: 'bi-twitch',
+    botconfig_rss_add: 'bi-rss', botconfig_rss_save: 'bi-rss', botconfig_rss_remove: 'bi-rss',
+    botconfig_mastodon_add: 'bi-mastodon', botconfig_mastodon_save: 'bi-mastodon', botconfig_mastodon_remove: 'bi-mastodon',
+    botconfig_linkedin_page_add: 'bi-linkedin', botconfig_linkedin_page_save: 'bi-linkedin', botconfig_linkedin_page_remove: 'bi-linkedin',
     file_write: 'bi-pencil', file_delete: 'bi-trash', file_upload: 'bi-cloud-upload',
     post_create: 'bi-file-earmark-plus', post_delete: 'bi-file-earmark-x',
     post_publish: 'bi-send', post_duplicate: 'bi-files',
@@ -3103,3 +3118,374 @@ if (addScanPathForm) {
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => { try { _restoreTabState(); } catch(e) {} }, 50);
 });
+
+// ── Bot: control panel ────────────────────────────────────────────────────────
+(function () {
+  const panel = document.getElementById('botControlPanel');
+  if (!panel) return;
+  const pid = panel.dataset.projectId;
+
+  const dot      = document.getElementById('botStatusDot');
+  const txt      = document.getElementById('botStatusText');
+  const since    = document.getElementById('botSince');
+  const svc      = document.getElementById('botService');
+  const outputWrap = document.getElementById('botCmdOutputWrap');
+  const output   = document.getElementById('botCmdOutput');
+
+  function setStatus(data) {
+    const active = data.active;
+    dot.style.background = active ? '#198754' : '#dc3545';
+    txt.textContent = active ? 'Running' : (data.status || 'Stopped');
+    since.textContent = data.since ? 'since ' + data.since : '';
+    svc.textContent = data.service ? data.service + '.service' : '';
+  }
+
+  async function loadStatus() {
+    try {
+      const r = await fetch('/api/botcontrol?action=status&project_id=' + pid);
+      const d = await r.json();
+      if (d.error) { txt.textContent = d.error; return; }
+      setStatus(d);
+    } catch (e) { txt.textContent = 'Error loading status'; }
+  }
+
+  async function runAction(action) {
+    outputWrap.classList.remove('d-none');
+    output.textContent = action + '…';
+    try {
+      const r = await fetch('/api/botcontrol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: +pid, action }),
+      });
+      const d = await r.json();
+      output.textContent = d.output || (d.ok ? 'Done.' : 'Failed.');
+      setStatus(d);
+    } catch (e) { output.textContent = 'Request failed: ' + e.message; }
+  }
+
+  document.getElementById('botStartBtn').addEventListener('click', () => runAction('start'));
+  document.getElementById('botStopBtn').addEventListener('click', () => runAction('stop'));
+  document.getElementById('botRestartBtn').addEventListener('click', () => runAction('restart'));
+  document.getElementById('botRefreshStatusBtn').addEventListener('click', loadStatus);
+  document.getElementById('botClearOutputBtn').addEventListener('click', () => {
+    output.textContent = '';
+    outputWrap.classList.add('d-none');
+  });
+
+  loadStatus();
+})();
+
+// ── Bot: config editor ────────────────────────────────────────────────────────
+(function () {
+  const panel = document.getElementById('botConfigPanel');
+  if (!panel) return;
+  const pid = panel.dataset.projectId;
+
+  function rgbToHex([r, g, b]) {
+    return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  let _config = null;
+
+  async function loadConfig() {
+    const r = await fetch('/api/botconfig?action=get&project_id=' + pid);
+    const d = await r.json();
+    if (d.error) { showError(d.error); return; }
+    _config = d.config;
+    renderStreamers(_config.twitch || {});
+    renderFeeds(_config.rss || {});
+    renderMastodon(_config.mastodon || {});
+    renderLinkedinPages(_config.linkedin?.pages || {});
+    renderLinkedinConnection(_config.linkedin || {});
+  }
+
+  // ── Streamers ────────────────────────────────────────────────────────────────
+  function renderStreamers(twitch) {
+    const list = document.getElementById('streamerList');
+    const names = Object.keys(twitch);
+    if (!names.length) { list.innerHTML = '<div class="text-muted small">No streamers configured.</div>'; return; }
+    list.innerHTML = names.map(name => {
+      const s = twitch[name];
+      const hex = rgbToHex(s.color || [255, 255, 255]);
+      return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1">
+        <span class="rounded-circle border flex-shrink-0" style="width:16px;height:16px;background:${hex}"></span>
+        <span class="fw-semibold small">${esc(name)}</span>
+        <small class="text-muted ms-1">ch: <code>${esc(String(s.channel_id ?? '–'))}</code></small>
+        ${s.role_id ? `<small class="text-muted">role: <code>${esc(String(s.role_id))}</code></small>` : ''}
+        <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-streamer-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-xs btn-outline-danger py-0 px-1 del-streamer-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.edit-streamer-btn').forEach(b => b.addEventListener('click', () => openStreamerModal('edit', b.dataset.name)));
+    list.querySelectorAll('.del-streamer-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_streamer', b.dataset.name, `Remove streamer "${b.dataset.name}"?`, 'Streamer removed')));
+  }
+
+  function openStreamerModal(mode, name = '') {
+    const s = (mode === 'edit' && _config?.twitch?.[name]) || {};
+    document.getElementById('streamerModalTitle').textContent = mode === 'add' ? 'Add Streamer' : 'Edit Streamer';
+    document.getElementById('streamerModalMode').value = mode;
+    document.getElementById('streamerName').value = name;
+    document.getElementById('streamerName').disabled = mode === 'edit';
+    document.getElementById('streamerChannelId').value = s.channel_id ?? '';
+    document.getElementById('streamerRoleId').value = s.role_id ?? '';
+    document.getElementById('streamerColor').value = rgbToHex(s.color || [100, 65, 165]);
+    document.getElementById('streamerModalError').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('streamerModal')).show();
+  }
+
+  document.getElementById('addStreamerBtn').addEventListener('click', () => openStreamerModal('add'));
+  document.getElementById('streamerModalSaveBtn').addEventListener('click', async () => {
+    const mode = document.getElementById('streamerModalMode').value;
+    const name = document.getElementById('streamerName').value.trim();
+    const errEl = document.getElementById('streamerModalError');
+    errEl.classList.add('d-none');
+    if (!name) { errEl.textContent = 'Name required'; errEl.classList.remove('d-none'); return; }
+    const ok = await apiPost({ action: mode === 'add' ? 'add_streamer' : 'save_streamer', name, data: {
+      channel_id: document.getElementById('streamerChannelId').value.trim(),
+      role_id:    document.getElementById('streamerRoleId').value.trim(),
+      color:      hexToRgb(document.getElementById('streamerColor').value),
+    }}, errEl);
+    if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('streamerModal')).hide(); showSuccess('Streamer saved'); loadConfig(); }
+  });
+
+  // ── RSS feeds ────────────────────────────────────────────────────────────────
+  function renderFeeds(rss) {
+    const list = document.getElementById('rssList');
+    const names = Object.keys(rss);
+    if (!names.length) { list.innerHTML = '<div class="text-muted small">No RSS feeds configured.</div>'; return; }
+    list.innerHTML = names.map(name => {
+      const f = rss[name];
+      const hex = rgbToHex(Array.isArray(f.color) ? f.color : [255, 215, 0]);
+      const activeBadge = f.active
+        ? '<span class="badge bg-success-subtle text-success border ms-1">active</span>'
+        : '<span class="badge bg-secondary-subtle text-muted border ms-1">paused</span>';
+      const acct = f.mastodon_account ? `<small class="text-muted"><i class="bi bi-mastodon"></i> ${esc(f.mastodon_account)}</small>` : '';
+      const liPage = f.linkedin_page ? `<small class="text-muted"><i class="bi bi-linkedin"></i> ${esc(f.linkedin_page)}</small>` : '';
+      return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1 flex-wrap">
+        <span class="rounded-circle border flex-shrink-0" style="width:16px;height:16px;background:${hex}"></span>
+        <span class="fw-semibold small">${esc(name)}</span>${activeBadge}
+        ${acct}${liPage}
+        <small class="text-muted text-truncate" style="max-width:180px" title="${esc(f.rss_url || '')}">${esc(f.rss_url || '–')}</small>
+        <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-rss-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-xs btn-outline-danger py-0 px-1 del-rss-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.edit-rss-btn').forEach(b => b.addEventListener('click', () => openRssModal('edit', b.dataset.name)));
+    list.querySelectorAll('.del-rss-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_rss', b.dataset.name, `Remove RSS feed "${b.dataset.name}"?`, 'Feed removed')));
+  }
+
+  function populateSelect(id, options, selected) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">— none —</option>' +
+      options.map(([v, l]) => `<option value="${esc(v)}" ${v === selected ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  }
+
+  function openRssModal(mode, name = '') {
+    const f = (mode === 'edit' && _config?.rss?.[name]) || {};
+    document.getElementById('rssModalTitle').textContent = mode === 'add' ? 'Add RSS Feed' : 'Edit RSS Feed';
+    document.getElementById('rssModalMode').value = mode;
+    document.getElementById('rssName').value = name;
+    document.getElementById('rssName').disabled = mode === 'edit';
+    document.getElementById('rssUrl').value = f.rss_url ?? '';
+    document.getElementById('rssChannelId').value = f.channel_id ?? '';
+    document.getElementById('rssRoleId').value = f.role_id ?? '';
+    document.getElementById('rssColor').value = rgbToHex(Array.isArray(f.color) ? f.color : [255, 215, 0]);
+    document.getElementById('rssActive').checked = f.active !== false;
+    populateSelect('rssMastodonAccount',
+      Object.entries(_config?.mastodon || {}).map(([k, v]) => [k, v.label || k]),
+      f.mastodon_account || '');
+    populateSelect('rssLinkedinPage',
+      Object.entries(_config?.linkedin?.pages || {}).map(([k, v]) => [k, v.label || k]),
+      f.linkedin_page || '');
+    document.getElementById('rssModalError').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('rssModal')).show();
+  }
+
+  document.getElementById('addRssBtn').addEventListener('click', () => openRssModal('add'));
+  document.getElementById('rssModalSaveBtn').addEventListener('click', async () => {
+    const mode = document.getElementById('rssModalMode').value;
+    const name = document.getElementById('rssName').value.trim();
+    const errEl = document.getElementById('rssModalError');
+    errEl.classList.add('d-none');
+    if (!name) { errEl.textContent = 'Name required'; errEl.classList.remove('d-none'); return; }
+    const ok = await apiPost({ action: mode === 'add' ? 'add_rss' : 'save_rss', name, data: {
+      rss_url:          document.getElementById('rssUrl').value.trim(),
+      channel_id:       document.getElementById('rssChannelId').value.trim(),
+      role_id:          document.getElementById('rssRoleId').value.trim(),
+      color:            hexToRgb(document.getElementById('rssColor').value),
+      active:           document.getElementById('rssActive').checked,
+      mastodon_account: document.getElementById('rssMastodonAccount').value,
+      linkedin_page:    document.getElementById('rssLinkedinPage').value,
+    }}, errEl);
+    if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('rssModal')).hide(); showSuccess('Feed saved'); loadConfig(); }
+  });
+
+  // ── Mastodon accounts ─────────────────────────────────────────────────────────
+  function renderMastodon(mastodon) {
+    const list = document.getElementById('mastodonList');
+    const names = Object.keys(mastodon);
+    if (!names.length) { list.innerHTML = '<div class="text-muted small">No accounts configured.</div>'; return; }
+    list.innerHTML = names.map(name => {
+      const a = mastodon[name];
+      return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1">
+        <span class="fw-semibold small">${esc(a.label || name)}</span>
+        <code class="small text-muted">MASTODON_TOKEN_${esc(name.toUpperCase())}</code>
+        <small class="text-muted text-truncate" style="max-width:160px">${esc(a.api_base_url || '')}</small>
+        <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-mastodon-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-xs btn-outline-danger py-0 px-1 del-mastodon-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.edit-mastodon-btn').forEach(b => b.addEventListener('click', () => openMastodonModal('edit', b.dataset.name)));
+    list.querySelectorAll('.del-mastodon-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_mastodon', b.dataset.name, `Remove account "${b.dataset.name}"?`, 'Account removed')));
+  }
+
+  function openMastodonModal(mode, name = '') {
+    const a = (mode === 'edit' && _config?.mastodon?.[name]) || {};
+    document.getElementById('mastodonModalTitle').textContent = mode === 'add' ? 'Add Mastodon Account' : 'Edit Mastodon Account';
+    document.getElementById('mastodonModalMode').value = mode;
+    document.getElementById('mastodonName').value = name;
+    document.getElementById('mastodonName').disabled = mode === 'edit';
+    document.getElementById('mastodonLabel').value = a.label ?? '';
+    document.getElementById('mastodonBase').value = a.api_base_url ?? '';
+    document.getElementById('mastodonModalError').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('mastodonModal')).show();
+  }
+
+  document.getElementById('addMastodonBtn').addEventListener('click', () => openMastodonModal('add'));
+  document.getElementById('mastodonModalSaveBtn').addEventListener('click', async () => {
+    const mode = document.getElementById('mastodonModalMode').value;
+    const name = document.getElementById('mastodonName').value.trim();
+    const errEl = document.getElementById('mastodonModalError');
+    errEl.classList.add('d-none');
+    if (!name) { errEl.textContent = 'Key required'; errEl.classList.remove('d-none'); return; }
+    const ok = await apiPost({ action: mode === 'add' ? 'add_mastodon' : 'save_mastodon', name, data: {
+      label:        document.getElementById('mastodonLabel').value.trim(),
+      api_base_url: document.getElementById('mastodonBase').value.trim(),
+    }}, errEl);
+    if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('mastodonModal')).hide(); showSuccess('Account saved'); loadConfig(); }
+  });
+
+  // ── LinkedIn pages ────────────────────────────────────────────────────────────
+  function renderLinkedinConnection(li) {
+    const label = document.getElementById('liConnectionLabel');
+    const expiry = document.getElementById('liTokenExpiry');
+    const connected = li.access_token === '***';
+    label.textContent = connected ? 'Connected to LinkedIn' : 'Not connected';
+    label.className = 'small fw-semibold ' + (connected ? 'text-success' : 'text-muted');
+    expiry.textContent = li.token_expiry ? 'Expires: ' + li.token_expiry : '';
+  }
+
+  function renderLinkedinPages(pages) {
+    const list = document.getElementById('linkedinPagesList');
+    const names = Object.keys(pages);
+    if (!names.length) { list.innerHTML = '<div class="text-muted small">No pages configured.</div>'; return; }
+    list.innerHTML = names.map(name => {
+      const p = pages[name];
+      return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1">
+        <span class="fw-semibold small">${esc(p.label || name)}</span>
+        <code class="small text-muted">${esc(p.organization_id || '–')}</code>
+        <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-lipage-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-xs btn-outline-danger py-0 px-1 del-lipage-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.edit-lipage-btn').forEach(b => b.addEventListener('click', () => openLinkedinPageModal('edit', b.dataset.name)));
+    list.querySelectorAll('.del-lipage-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_linkedin_page', b.dataset.name, `Remove page "${b.dataset.name}"?`, 'Page removed')));
+  }
+
+  function openLinkedinPageModal(mode, name = '') {
+    const p = (mode === 'edit' && _config?.linkedin?.pages?.[name]) || {};
+    document.getElementById('linkedinPageModalTitle').textContent = mode === 'add' ? 'Add LinkedIn Page' : 'Edit LinkedIn Page';
+    document.getElementById('linkedinPageModalMode').value = mode;
+    document.getElementById('linkedinPageName').value = name;
+    document.getElementById('linkedinPageName').disabled = mode === 'edit';
+    document.getElementById('linkedinPageLabel').value = p.label ?? '';
+    document.getElementById('linkedinPageOrgId').value = p.organization_id ?? '';
+    document.getElementById('linkedinPageModalError').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('linkedinPageModal')).show();
+  }
+
+  document.getElementById('addLinkedinPageBtn').addEventListener('click', () => openLinkedinPageModal('add'));
+  document.getElementById('linkedinPageModalSaveBtn').addEventListener('click', async () => {
+    const mode = document.getElementById('linkedinPageModalMode').value;
+    const name = document.getElementById('linkedinPageName').value.trim();
+    const errEl = document.getElementById('linkedinPageModalError');
+    errEl.classList.add('d-none');
+    if (!name) { errEl.textContent = 'Key required'; errEl.classList.remove('d-none'); return; }
+    const ok = await apiPost({ action: mode === 'add' ? 'add_linkedin_page' : 'save_linkedin_page', name, data: {
+      label:           document.getElementById('linkedinPageLabel').value.trim(),
+      organization_id: document.getElementById('linkedinPageOrgId').value.trim(),
+    }}, errEl);
+    if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('linkedinPageModal')).hide(); showSuccess('Page saved'); loadConfig(); }
+  });
+
+  // ── Shared helpers ────────────────────────────────────────────────────────────
+  async function apiPost(body, errEl) {
+    const r = await fetch('/api/botconfig', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: +pid, ...body }),
+    });
+    const d = await r.json();
+    if (d.error && errEl) { errEl.textContent = d.error; errEl.classList.remove('d-none'); return false; }
+    if (d.error) { showError(d.error); return false; }
+    return true;
+  }
+
+  function deleteItem(action, name, confirmMsg, successMsg) {
+    confirmAction(confirmMsg, async () => {
+      const ok = await apiPost({ action, name }, null);
+      if (ok) { showSuccess(successMsg); loadConfig(); }
+    });
+  }
+
+  loadConfig();
+})();
+
+// ── Bot: log viewer ───────────────────────────────────────────────────────────
+(function () {
+  const panel = document.getElementById('botLogsPanel');
+  if (!panel) return;
+  const pid  = panel.dataset.projectId;
+  const pre  = document.getElementById('logsOutput');
+  let _timer = null;
+
+  async function loadLogs() {
+    const lines = document.getElementById('logsLineCount').value;
+    try {
+      const r = await fetch(`/api/botlogs?project_id=${pid}&lines=${lines}`);
+      const d = await r.json();
+      if (d.error) { pre.textContent = d.error; return; }
+      pre.textContent = d.lines.join('\n') || '(no log entries)';
+      pre.scrollTop = pre.scrollHeight;
+    } catch (e) { pre.textContent = 'Error: ' + e.message; }
+  }
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    _timer = setInterval(loadLogs, 5000);
+  }
+  function stopAutoRefresh() {
+    if (_timer) { clearInterval(_timer); _timer = null; }
+  }
+
+  document.getElementById('logsRefreshBtn').addEventListener('click', loadLogs);
+  document.getElementById('logsLineCount').addEventListener('change', loadLogs);
+  document.getElementById('logsAutoRefresh').addEventListener('change', e => {
+    e.target.checked ? startAutoRefresh() : stopAutoRefresh();
+  });
+
+  loadLogs();
+})();
+
