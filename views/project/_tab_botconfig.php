@@ -178,6 +178,30 @@
   </div>
 </div>
 
+<!-- Shared compose modal -->
+<div class="modal fade" id="composeModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="composeModalTitle">Post</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="composeModalType">
+        <input type="hidden" id="composeModalName">
+        <textarea id="composeText" class="form-control form-control-sm font-monospace"
+                  rows="5" placeholder="What's on your mind?"></textarea>
+        <div class="form-text small mt-1" id="composeHint"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <div class="text-danger small d-none flex-grow-1" id="composeModalError"></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="composeModalPostBtn">Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- LinkedIn page modal -->
 <div class="modal fade" id="linkedinPageModal" tabindex="-1">
   <div class="modal-dialog modal-sm">

@@ -2365,6 +2365,9 @@ if (addScanPathForm) {
     botconfig_linkedin_page_add: 'linkedin page added', botconfig_linkedin_page_save: 'linkedin page updated',
     botconfig_linkedin_page_remove: 'linkedin page removed',
     linkedin_oauth_connect: 'linkedin connected',
+    botcompose_rss_repost: 'rss repost queued',
+    botcompose_mastodon_post: 'mastodon posted',
+    botcompose_linkedin_post: 'linkedin posted',
     file_write: 'file edit', file_delete: 'file delete', file_upload: 'upload',
     post_create: 'post created', post_delete: 'post deleted',
     post_publish: 'post published', post_duplicate: 'post duplicated',
@@ -2401,6 +2404,9 @@ if (addScanPathForm) {
     botconfig_mastodon_add: 'bi-mastodon', botconfig_mastodon_save: 'bi-mastodon', botconfig_mastodon_remove: 'bi-mastodon',
     botconfig_linkedin_page_add: 'bi-linkedin', botconfig_linkedin_page_save: 'bi-linkedin', botconfig_linkedin_page_remove: 'bi-linkedin',
     linkedin_oauth_connect: 'bi-linkedin',
+    botcompose_rss_repost: 'bi-arrow-repeat',
+    botcompose_mastodon_post: 'bi-mastodon',
+    botcompose_linkedin_post: 'bi-linkedin',
     file_write: 'bi-pencil', file_delete: 'bi-trash', file_upload: 'bi-cloud-upload',
     post_create: 'bi-file-earmark-plus', post_delete: 'bi-file-earmark-x',
     post_publish: 'bi-send', post_duplicate: 'bi-files',
@@ -3276,11 +3282,24 @@ window.addEventListener('DOMContentLoaded', () => {
         ${acct}${liPage}
         <small class="text-muted text-truncate" style="max-width:180px" title="${esc(f.rss_url || '')}">${esc(f.rss_url || '–')}</small>
         <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 repost-rss-btn" data-name="${esc(name)}" title="Repeat last post"><i class="bi bi-arrow-repeat"></i></button>
           <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-rss-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
           <button class="btn btn-xs btn-outline-danger py-0 px-1 del-rss-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
         </div>
       </div>`;
     }).join('');
+    list.querySelectorAll('.repost-rss-btn').forEach(b => b.addEventListener('click', () => {
+      const name = b.dataset.name;
+      confirmAction(`Repeat last post for feed "${name}"?\nThe bot will repost it on the next poll (within 5 min).`, async () => {
+        const r = await fetch('/api/botcompose', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: +pid, action: 'rss_repost', feed_name: name }),
+        });
+        const d = await r.json();
+        if (d.ok) showSuccess(d.message || 'Repost queued — bot will post on next poll');
+        else showError(d.error || 'Failed');
+      });
+    }));
     list.querySelectorAll('.edit-rss-btn').forEach(b => b.addEventListener('click', () => openRssModal('edit', b.dataset.name)));
     list.querySelectorAll('.del-rss-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_rss', b.dataset.name, `Remove RSS feed "${b.dataset.name}"?`, 'Feed removed')));
   }
@@ -3343,11 +3362,15 @@ window.addEventListener('DOMContentLoaded', () => {
         <code class="small text-muted">MASTODON_TOKEN_${esc(name.toUpperCase())}</code>
         <small class="text-muted text-truncate" style="max-width:160px">${esc(a.api_base_url || '')}</small>
         <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 compose-mastodon-btn"
+                  data-name="${esc(name)}" data-label="${esc(a.label || name)}" title="Post to Mastodon">
+            <i class="bi bi-pencil-square"></i></button>
           <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-mastodon-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
           <button class="btn btn-xs btn-outline-danger py-0 px-1 del-mastodon-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
         </div>
       </div>`;
     }).join('');
+    list.querySelectorAll('.compose-mastodon-btn').forEach(b => b.addEventListener('click', () => openComposeModal('mastodon', b.dataset.name, b.dataset.label)));
     list.querySelectorAll('.edit-mastodon-btn').forEach(b => b.addEventListener('click', () => openMastodonModal('edit', b.dataset.name)));
     list.querySelectorAll('.del-mastodon-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_mastodon', b.dataset.name, `Remove account "${b.dataset.name}"?`, 'Account removed')));
   }
@@ -3405,11 +3428,15 @@ window.addEventListener('DOMContentLoaded', () => {
         <span class="fw-semibold small">${esc(p.label || name)}</span>
         <code class="small text-muted">${esc(p.organization_id || '–')}</code>
         <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 compose-linkedin-btn"
+                  data-name="${esc(name)}" data-label="${esc(p.label || name)}" title="Post to LinkedIn">
+            <i class="bi bi-pencil-square"></i></button>
           <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-lipage-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
           <button class="btn btn-xs btn-outline-danger py-0 px-1 del-lipage-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
         </div>
       </div>`;
     }).join('');
+    list.querySelectorAll('.compose-linkedin-btn').forEach(b => b.addEventListener('click', () => openComposeModal('linkedin', b.dataset.name, b.dataset.label)));
     list.querySelectorAll('.edit-lipage-btn').forEach(b => b.addEventListener('click', () => openLinkedinPageModal('edit', b.dataset.name)));
     list.querySelectorAll('.del-lipage-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_linkedin_page', b.dataset.name, `Remove page "${b.dataset.name}"?`, 'Page removed')));
   }
@@ -3438,6 +3465,49 @@ window.addEventListener('DOMContentLoaded', () => {
       organization_id: document.getElementById('linkedinPageOrgId').value.trim(),
     }}, errEl);
     if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('linkedinPageModal')).hide(); showSuccess('Page saved'); loadConfig(); }
+  });
+
+  // ── Compose (Mastodon / LinkedIn direct post) ─────────────────────────────────
+  function openComposeModal(type, name, label) {
+    document.getElementById('composeModalTitle').textContent = 'Post to ' + label;
+    document.getElementById('composeModalType').value = type;
+    document.getElementById('composeModalName').value = name;
+    document.getElementById('composeText').value = '';
+    document.getElementById('composeModalError').classList.add('d-none');
+    document.getElementById('composeHint').textContent = type === 'mastodon'
+      ? 'Plain text post — no image upload from this composer.'
+      : 'Text post to LinkedIn organization page.';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('composeModal')).show();
+    setTimeout(() => document.getElementById('composeText').focus(), 300);
+  }
+
+  document.getElementById('composeModalPostBtn').addEventListener('click', async () => {
+    const type  = document.getElementById('composeModalType').value;
+    const name  = document.getElementById('composeModalName').value;
+    const text  = document.getElementById('composeText').value.trim();
+    const errEl = document.getElementById('composeModalError');
+    errEl.classList.add('d-none');
+    if (!text) { errEl.textContent = 'Text is required'; errEl.classList.remove('d-none'); return; }
+
+    const body = { project_id: +pid, action: type === 'mastodon' ? 'mastodon_post' : 'linkedin_post', text };
+    if (type === 'mastodon') body.account_name = name;
+    else body.page_name = name;
+
+    const btn = document.getElementById('composeModalPostBtn');
+    btn.disabled = true;
+    const r = await fetch('/api/botcompose', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    btn.disabled = false;
+    if (d.ok) {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('composeModal')).hide();
+      showSuccess('Posted!');
+    } else {
+      errEl.textContent = d.error || 'Post failed';
+      errEl.classList.remove('d-none');
+    }
   });
 
   // ── Shared helpers ────────────────────────────────────────────────────────────
