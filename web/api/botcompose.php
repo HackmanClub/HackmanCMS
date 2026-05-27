@@ -21,10 +21,11 @@ function read_config(string $path): ?array {
     return is_array($data) ? $data : null;
 }
 
-function write_config(string $path, array $data): void {
+function write_config(string $path, array $data): bool {
     $tmp = $path . '.tmp';
-    file_put_contents($tmp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    rename($tmp, $path);
+    $ok  = file_put_contents($tmp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) !== false;
+    if ($ok) $ok = rename($tmp, $path);
+    return (bool)$ok;
 }
 
 function read_dot_env(string $path): array {
@@ -63,7 +64,9 @@ if ($action === 'rss_repost') {
     if (!isset($config['rss'][$feed_name])) { echo json_encode(['error' => 'Feed not found']); exit; }
 
     $config['rss'][$feed_name]['last_id'] = '';
-    write_config($config_path, $config);
+    if (!write_config($config_path, $config)) {
+        echo json_encode(['error' => 'Failed to write config.json — check file permissions']); exit;
+    }
 
     Audit::log($db, 'botcompose_rss_repost', $pid, $feed_name);
     echo json_encode(['ok' => true, 'message' => 'Last ID cleared — bot will repost on next poll (within 5 min)']);
