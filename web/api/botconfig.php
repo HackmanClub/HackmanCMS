@@ -39,6 +39,13 @@ if ($method === 'GET') {
     $safe = $config;
     if (isset($safe['linkedin']['access_token']))  $safe['linkedin']['access_token']  = $safe['linkedin']['access_token']  ? '***' : null;
     if (isset($safe['linkedin']['refresh_token'])) $safe['linkedin']['refresh_token'] = $safe['linkedin']['refresh_token'] ? '***' : null;
+    // Discord snowflake IDs exceed JS Number.MAX_SAFE_INTEGER — send as strings
+    foreach (['twitch', 'rss'] as $section) {
+        foreach ($safe[$section] ?? [] as $key => $item) {
+            if (isset($item['channel_id'])) $safe[$section][$key]['channel_id'] = (string)$item['channel_id'];
+            if (isset($item['role_id']) && $item['role_id'] !== null) $safe[$section][$key]['role_id'] = (string)$item['role_id'];
+        }
+    }
     echo json_encode(['config' => $safe]);
     exit;
 }
