@@ -280,9 +280,57 @@ function isInteresting(array $row, string $pathPrefix): bool {
                      'mp3','wav','ogg','pdf','zip','tar','gz','xml','txt'];
     if (in_array($ext, $asset, true)) return false;
 
-    // Skip obvious bots
+    // Empty UA — almost certainly automated
     $ua = strtolower((string)$row['ua']);
-    foreach (['bot','crawl','spider','curl','wget','headless','scrapy','go-http','python-requests','okhttp'] as $needle) {
+    if ($ua === '') return false;
+
+    // Comprehensive bot / automated-tool filter
+    static $botSignals = [
+        // Generic signals — catches most search engines + named bots
+        'bot', 'crawl', 'spider', 'headless', 'scrapy', 'slurp',
+
+        // HTTP tools and libraries
+        'curl', 'wget',
+        'python-requests', 'python-urllib', 'python-httpx',
+        'go-http', 'okhttp',
+        'libwww-perl', 'lwp/',
+        'guzzlehttp', 'guzzle/',
+        'java/', 'apache-httpclient',
+        'node-fetch', 'undici/', 'got/', 'axios/',
+        'aiohttp/', 'httpx/',
+        'mechanize', 'faraday/', 'httpie', 'ruby',
+
+        // SEO / link-analysis platforms
+        'ahrefs', 'semrush', 'moz.com', 'sitechecker', 'similarweb',
+        'screaming frog', 'dataforseo', 'serpstat', 'seokicks', 'babbar',
+        'dotbot', 'duckduckgo-favicons',
+
+        // Uptime / monitoring services
+        'uptimerobot', 'pingdom', 'statuscake', 'site24x7', 'freshping',
+        'betteruptime', 'hetrixtools', 'nodeping', 'hyperping',
+        'updown.io', 'check_http', 'healthcheck',
+
+        // Security / vulnerability scanners
+        'nikto', 'nessus', 'masscan', 'zgrab', 'nuclei',
+        'sqlmap', 'whatweb', 'wfuzz', 'dirbuster', 'gobuster',
+        'feroxbuster', 'burp',
+
+        // Social link-preview fetchers (not caught by "bot")
+        'whatsapp', 'skypeuripreview', 'slack-imgproxy', 'vkshare',
+
+        // Archive / site copiers
+        'ia_archiver', 'httrack',
+
+        // APM / observability agents
+        'datadog', 'newrelic', 'dynatrace',
+
+        // AI crawlers not containing "bot"
+        'cohere-ai', 'anthropic-ai', 'meta-externalagent',
+
+        // Generic scanner vocabulary
+        'scanner', 'checker', 'prober', 'monitor',
+    ];
+    foreach ($botSignals as $needle) {
         if (str_contains($ua, $needle)) return false;
     }
     return true;
