@@ -65,11 +65,31 @@ if (!file_exists($config_path)) {
 $config = json_decode(file_get_contents($config_path), true);
 if (!is_array($config)) { echo 'Could not parse config.json. <a href="/">Go back</a>'; exit; }
 
+// Fetch member info to get personal posting URN and display name
+$ch2 = curl_init('https://api.linkedin.com/v2/userinfo');
+curl_setopt_array($ch2, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $data['access_token']],
+]);
+$me = json_decode(curl_exec($ch2), true);
+curl_close($ch2);
+
 if (!isset($config['linkedin'])) $config['linkedin'] = [];
 $config['linkedin']['access_token']  = $data['access_token'];
 $config['linkedin']['refresh_token'] = $data['refresh_token'] ?? null;
 $expires_in = $data['expires_in'] ?? 5184000;
 $config['linkedin']['token_expiry']  = date('c', time() + $expires_in);
+$config['linkedin']['member_id']     = $me['sub'] ?? null;
+$config['linkedin']['member_name']   = $me['name'] ?? null;
+
+// Auto-create personal profile page on first connect
+if (!isset($config['linkedin']['pages']['profile'])) {
+    if (!isset($config['linkedin']['pages'])) $config['linkedin']['pages'] = [];
+    $config['linkedin']['pages']['profile'] = [
+        'label' => isset($me['name']) ? $me['name'] : 'Personal Profile',
+        'type'  => 'personal',
+    ];
+}
 
 $tmp = $config_path . '.tmp';
 file_put_contents($tmp, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));

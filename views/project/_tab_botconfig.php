@@ -222,6 +222,13 @@
           <input type="text" id="linkedinPageLabel" class="form-control form-control-sm" placeholder="My Organisation">
         </div>
         <div class="mb-2">
+          <label class="form-label small">Type</label>
+          <select id="linkedinPageType" class="form-select form-select-sm">
+            <option value="personal">Personal Profile</option>
+            <option value="organization">Organization Page</option>
+          </select>
+        </div>
+        <div class="mb-2" id="linkedinPageOrgIdRow">
           <label class="form-label small">Organization ID</label>
           <input type="text" id="linkedinPageOrgId" class="form-control form-control-sm font-monospace"
                  placeholder="123456789">

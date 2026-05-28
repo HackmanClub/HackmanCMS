@@ -169,10 +169,10 @@ if ($action === 'add_linkedin_page' || $action === 'save_linkedin_page') {
     }
     if (!isset($config['linkedin'])) $config['linkedin'] = [];
     if (!isset($config['linkedin']['pages'])) $config['linkedin']['pages'] = [];
-    $config['linkedin']['pages'][$name] = [
-        'label'           => trim($data['label'] ?? $name),
-        'organization_id' => trim($data['organization_id'] ?? ''),
-    ];
+    $type = in_array($data['type'] ?? '', ['personal', 'organization']) ? $data['type'] : 'organization';
+    $entry = ['label' => trim($data['label'] ?? $name), 'type' => $type];
+    if ($type === 'organization') $entry['organization_id'] = trim($data['organization_id'] ?? '');
+    $config['linkedin']['pages'][$name] = $entry;
     write_config($config_path, $config);
     Audit::log($db, 'botconfig_linkedin_page_' . ($action === 'add_linkedin_page' ? 'add' : 'save'), $pid, $name);
     echo json_encode(['ok' => true]);

@@ -3424,9 +3424,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!names.length) { list.innerHTML = '<div class="text-muted small">No pages configured.</div>'; return; }
     list.innerHTML = names.map(name => {
       const p = pages[name];
+      const isPersonal = p.type === 'personal';
+      const badge = isPersonal
+        ? `<span class="badge bg-secondary fw-normal">Personal</span>`
+        : `<code class="small text-muted">${esc(p.organization_id || '–')}</code>`;
       return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1">
         <span class="fw-semibold small">${esc(p.label || name)}</span>
-        <code class="small text-muted">${esc(p.organization_id || '–')}</code>
+        ${badge}
         <div class="ms-auto d-flex gap-1">
           <button class="btn btn-xs btn-outline-secondary py-0 px-1 compose-linkedin-btn"
                   data-name="${esc(name)}" data-label="${esc(p.label || name)}" title="Post to LinkedIn">
@@ -3441,6 +3445,11 @@ window.addEventListener('DOMContentLoaded', () => {
     list.querySelectorAll('.del-lipage-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_linkedin_page', b.dataset.name, `Remove page "${b.dataset.name}"?`, 'Page removed')));
   }
 
+  function _liPageTypeToggle() {
+    const isPersonal = document.getElementById('linkedinPageType').value === 'personal';
+    document.getElementById('linkedinPageOrgIdRow').classList.toggle('d-none', isPersonal);
+  }
+
   function openLinkedinPageModal(mode, name = '') {
     const p = (mode === 'edit' && _config?.linkedin?.pages?.[name]) || {};
     document.getElementById('linkedinPageModalTitle').textContent = mode === 'add' ? 'Add LinkedIn Page' : 'Edit LinkedIn Page';
@@ -3448,21 +3457,26 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('linkedinPageName').value = name;
     document.getElementById('linkedinPageName').disabled = mode === 'edit';
     document.getElementById('linkedinPageLabel').value = p.label ?? '';
+    document.getElementById('linkedinPageType').value = p.type ?? 'organization';
     document.getElementById('linkedinPageOrgId').value = p.organization_id ?? '';
     document.getElementById('linkedinPageModalError').classList.add('d-none');
+    _liPageTypeToggle();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('linkedinPageModal')).show();
   }
 
+  document.getElementById('linkedinPageType').addEventListener('change', _liPageTypeToggle);
   document.getElementById('addLinkedinPageBtn').addEventListener('click', () => openLinkedinPageModal('add'));
   document.getElementById('linkedinPageModalSaveBtn').addEventListener('click', async () => {
     const mode = document.getElementById('linkedinPageModalMode').value;
     const name = document.getElementById('linkedinPageName').value.trim();
+    const type = document.getElementById('linkedinPageType').value;
     const errEl = document.getElementById('linkedinPageModalError');
     errEl.classList.add('d-none');
     if (!name) { errEl.textContent = 'Key required'; errEl.classList.remove('d-none'); return; }
     const ok = await apiPost({ action: mode === 'add' ? 'add_linkedin_page' : 'save_linkedin_page', name, data: {
       label:           document.getElementById('linkedinPageLabel').value.trim(),
-      organization_id: document.getElementById('linkedinPageOrgId').value.trim(),
+      type,
+      organization_id: type === 'organization' ? document.getElementById('linkedinPageOrgId').value.trim() : '',
     }}, errEl);
     if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('linkedinPageModal')).hide(); showSuccess('Page saved'); loadConfig(); }
   });
