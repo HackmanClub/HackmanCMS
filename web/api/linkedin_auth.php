@@ -21,7 +21,8 @@ $url = 'https://www.linkedin.com/oauth/v2/authorization?' . http_build_query([
     'client_id'     => $client_id,
     'redirect_uri'  => $redirect_uri,
     'state'         => $state,
-    'scope'         => 'w_organization_social openid profile',
+    // 'scope'      => 'w_organization_social openid profile', // org page — requires Marketing Developer Platform approval
+    'scope'         => 'w_member_social openid profile',
 ]);
 
 echo json_encode(['url' => $url]);
