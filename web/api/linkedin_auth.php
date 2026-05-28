@@ -8,7 +8,7 @@ $stmt = $db->prepare('SELECT * FROM projects WHERE id = ? AND is_active = 1');
 $stmt->execute([$pid]);
 if (!$stmt->fetch()) { http_response_code(404); echo json_encode(['error' => 'Project not found']); exit; }
 
-$client_id = getenv('LINKEDIN_CLIENT_ID');
+$client_id = getenv('LINKEDIN_CLIENT_ID') ?: ($_SERVER['LINKEDIN_CLIENT_ID'] ?? null);
 if (!$client_id) { echo json_encode(['error' => 'LINKEDIN_CLIENT_ID not set in server environment']); exit; }
 
 $state = bin2hex(random_bytes(16));
