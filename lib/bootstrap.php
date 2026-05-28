@@ -3,6 +3,10 @@ if (!defined('ROOT')) define('ROOT', dirname(__DIR__));
 
 $config = require ROOT . '/config/config.php';
 
+if (file_exists(ROOT . '/config.local.php')) {
+    require_once ROOT . '/config.local.php';
+}
+
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 session_name($config['session_name']);

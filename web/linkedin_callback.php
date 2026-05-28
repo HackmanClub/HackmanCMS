@@ -20,8 +20,8 @@ if (isset($_GET['error'])) {
 $code = $_GET['code'] ?? '';
 if (!$code) { echo 'Missing code. <a href="/">Go back</a>'; exit; }
 
-$client_id     = getenv('LINKEDIN_CLIENT_ID') ?: ($_SERVER['LINKEDIN_CLIENT_ID'] ?? null);
-$client_secret = getenv('LINKEDIN_CLIENT_SECRET') ?: ($_SERVER['LINKEDIN_CLIENT_SECRET'] ?? null);
+$client_id     = defined('LINKEDIN_CLIENT_ID')     ? LINKEDIN_CLIENT_ID     : (getenv('LINKEDIN_CLIENT_ID')     ?: ($_SERVER['LINKEDIN_CLIENT_ID']     ?? null));
+$client_secret = defined('LINKEDIN_CLIENT_SECRET') ? LINKEDIN_CLIENT_SECRET : (getenv('LINKEDIN_CLIENT_SECRET') ?: ($_SERVER['LINKEDIN_CLIENT_SECRET'] ?? null));
 $redirect_uri  = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/linkedin/callback';
 
 // Exchange code for tokens

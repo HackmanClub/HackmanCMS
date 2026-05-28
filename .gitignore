@@ -8,6 +8,7 @@ web/BUILD
 
 # Local config overrides (never commit secrets)
 config/config.local.php
+config.local.php
 .env
 .env.local
 
