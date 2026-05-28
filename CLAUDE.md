@@ -110,12 +110,11 @@ Tables in play (beyond core `users`/`projects`/`scan_paths`/`settings`):
 | Target  | Command                  | What it does |
 |---------|--------------------------|--------------|
 | local   | `sudo ./deploylocal.sh`  | rsync to `/var/www/hackmancms`, chown www-data, migrate, reload Apache (port 8082) |
-| local (minimal) | `./bin/deploy.sh local` | rsync to `/var/www/hackmancms`, migrate (no chown/reload) |
-| prod    | `./bin/deploy.sh prod`   | SSH git pull + migrate on `bashy@37.205.12.57:/opt/hackmancms` |
+| server  | `./bin/deploy.sh`        | git pull, write BUILD, migrate — run directly on the server |
 
 `deploylocal.sh` is the one to use day-to-day on bashyMint — it sets www-data ownership
 so the schedules cron and npm/git child processes can write to project paths and to
-`data/hackmancms.sqlite`. Plain `./bin/deploy.sh local` exists for parity with prod.
+`data/hackmancms.sqlite`.
 
 On the server: Apache doc root = `/opt/hackmancms/web`. SQLite at `/opt/hackmancms/data/hackmancms.sqlite`.
 Web server process needs write access to `/opt/hackmancms/data/`.
