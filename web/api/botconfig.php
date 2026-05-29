@@ -159,6 +159,37 @@ if ($action === 'remove_mastodon') {
     exit;
 }
 
+// ── ADD / SAVE / REMOVE DISCORD CHANNEL ──────────────────────────────────────
+if ($action === 'add_discord_channel' || $action === 'save_discord_channel') {
+    $name = trim($input['name'] ?? '');
+    $data = $input['data'] ?? [];
+    if (!$name) { echo json_encode(['error' => 'Channel key required']); exit; }
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $name)) {
+        echo json_encode(['error' => 'Channel key must be alphanumeric/underscore (used as env var suffix)']); exit;
+    }
+    if ($action === 'add_discord_channel' && isset($config['discord_channels'][$name])) {
+        echo json_encode(['error' => 'Channel already exists']); exit;
+    }
+    if (!isset($config['discord_channels'])) $config['discord_channels'] = [];
+    $config['discord_channels'][$name] = ['label' => trim($data['label'] ?? $name)];
+    write_config($config_path, $config);
+    Audit::log($db, 'botconfig_discord_channel_' . ($action === 'add_discord_channel' ? 'add' : 'save'), $pid, $name);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+if ($action === 'remove_discord_channel') {
+    $name = trim($input['name'] ?? '');
+    if (!$name || !isset($config['discord_channels'][$name])) {
+        echo json_encode(['error' => 'Channel not found']); exit;
+    }
+    unset($config['discord_channels'][$name]);
+    write_config($config_path, $config);
+    Audit::log($db, 'botconfig_discord_channel_remove', $pid, $name);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
 // ── ADD / SAVE / REMOVE LINKEDIN PAGE ────────────────────────────────────────
 if ($action === 'add_linkedin_page' || $action === 'save_linkedin_page') {
     $name = trim($input['name'] ?? '');

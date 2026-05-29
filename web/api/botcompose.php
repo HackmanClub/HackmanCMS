@@ -120,9 +120,19 @@ if ($action === 'linkedin_post') {
     if (!$page)  { echo json_encode(['error' => "LinkedIn page '$page_name' not in config"]); exit; }
     if (!$token) { echo json_encode(['error' => 'LinkedIn not connected — use Connect LinkedIn first']); exit; }
 
-    $org_id  = $page['organization_id'] ?? '';
+    $page_type = $page['type'] ?? 'organization';
+    if ($page_type === 'personal') {
+        $member_id = $config['linkedin']['member_id'] ?? null;
+        if (!$member_id) { echo json_encode(['error' => 'Personal posting requires member_id — re-run OAuth flow']); exit; }
+        $author = str_starts_with($member_id, 'urn:') ? $member_id : "urn:li:person:$member_id";
+    } else {
+        $org_id = $page['organization_id'] ?? '';
+        if (!$org_id) { echo json_encode(['error' => "Organization page '$page_name' has no organization_id"]); exit; }
+        $author = "urn:li:organization:$org_id";
+    }
+
     $payload = json_encode([
-        'author'          => "urn:li:organization:$org_id",
+        'author'          => $author,
         'lifecycleState'  => 'PUBLISHED',
         'specificContent' => [
             'com.linkedin.ugc.ShareContent' => [
@@ -149,6 +159,35 @@ if ($action === 'linkedin_post') {
     }
 
     Audit::log($db, 'botcompose_linkedin_post', $pid, $page_name);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// ── Discord: post via webhook ─────────────────────────────────────────────────
+if ($action === 'discord_post') {
+    $channel_key = $input['channel_key'] ?? '';
+    $text        = trim($input['text'] ?? '');
+    if (!$channel_key || !$text) { echo json_encode(['error' => 'channel_key and text required']); exit; }
+
+    $config = read_config($config_path);
+    if (!$config) { echo json_encode(['error' => 'config.json not found']); exit; }
+
+    $channel = $config['discord_channels'][$channel_key] ?? null;
+    if (!$channel) { echo json_encode(['error' => "Discord channel '$channel_key' not in config"]); exit; }
+
+    $env         = read_dot_env($base . '/.env');
+    $webhook_url = $env['DISCORD_WEBHOOK_' . strtoupper($channel_key)] ?? '';
+    if (!$webhook_url) {
+        echo json_encode(['error' => 'DISCORD_WEBHOOK_' . strtoupper($channel_key) . ' not set in .env']); exit;
+    }
+
+    [$status, $resp] = curl_post($webhook_url, ['Content-Type: application/json'], json_encode(['content' => $text]));
+    if ($status !== 200 && $status !== 204) {
+        $err = json_decode($resp, true)['message'] ?? "HTTP $status";
+        echo json_encode(['error' => "Discord error: $err"]); exit;
+    }
+
+    Audit::log($db, 'botcompose_discord_post', $pid, $channel_key);
     echo json_encode(['ok' => true]);
     exit;
 }

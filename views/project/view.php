@@ -40,7 +40,7 @@ $tabLabels = [
     'plugins'   => 'Plugins',   'git'       => 'Git',
     'notes'     => 'Notes',     'settings'  => 'Settings',
     'bot'       => 'Bot',       'botconfig' => 'Config',
-    'logs'      => 'Logs',
+    'botschedule' => 'Schedule', 'logs'    => 'Logs',
 ];
 $tabIcons = [
     'dashboard' => 'bi-grid-1x2',         'analytics' => 'bi-graph-up',
@@ -50,11 +50,11 @@ $tabIcons = [
     'plugins'   => 'bi-puzzle',           'git'       => 'bi-git',
     'notes'     => 'bi-sticky',           'settings'  => 'bi-gear',
     'bot'       => 'bi-robot',            'botconfig' => 'bi-sliders2',
-    'logs'      => 'bi-journal-text',
+    'botschedule' => 'bi-calendar-event', 'logs'    => 'bi-journal-text',
 ];
 $tabGroups = [
     ['dashboard', 'analytics'],
-    ['bot', 'botconfig', 'logs'],
+    ['bot', 'botconfig', 'botschedule', 'logs'],
     ['posts', 'config', 'files', 'media'],
     ['run', 'themes', 'plugins', 'git'],
     ['notes', 'settings'],
@@ -266,6 +266,9 @@ $tabGroups = [
 
 <?php elseif ($tab === 'botconfig'): ?>
 <?php include ROOT . '/views/project/_tab_botconfig.php'; ?>
+
+<?php elseif ($tab === 'botschedule'): ?>
+<?php include ROOT . '/views/project/_tab_botschedule.php'; ?>
 
 <?php elseif ($tab === 'logs'): ?>
 <?php include ROOT . '/views/project/_tab_logs.php'; ?>

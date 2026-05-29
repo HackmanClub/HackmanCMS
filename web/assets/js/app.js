@@ -2364,10 +2364,15 @@ if (addScanPathForm) {
     botconfig_mastodon_remove: 'mastodon removed',
     botconfig_linkedin_page_add: 'linkedin page added', botconfig_linkedin_page_save: 'linkedin page updated',
     botconfig_linkedin_page_remove: 'linkedin page removed',
+    botconfig_discord_channel_add: 'discord channel added', botconfig_discord_channel_save: 'discord channel updated',
+    botconfig_discord_channel_remove: 'discord channel removed',
     linkedin_oauth_connect: 'linkedin connected',
     botcompose_rss_repost: 'rss repost queued',
     botcompose_mastodon_post: 'mastodon posted',
     botcompose_linkedin_post: 'linkedin posted',
+    botcompose_discord_post: 'discord posted',
+    scheduled_post_create: 'post scheduled',
+    scheduled_post_delete: 'scheduled post deleted',
     file_write: 'file edit', file_delete: 'file delete', file_upload: 'upload',
     post_create: 'post created', post_delete: 'post deleted',
     post_publish: 'post published', post_duplicate: 'post duplicated',
@@ -2403,10 +2408,14 @@ if (addScanPathForm) {
     botconfig_rss_add: 'bi-rss', botconfig_rss_save: 'bi-rss', botconfig_rss_remove: 'bi-rss',
     botconfig_mastodon_add: 'bi-mastodon', botconfig_mastodon_save: 'bi-mastodon', botconfig_mastodon_remove: 'bi-mastodon',
     botconfig_linkedin_page_add: 'bi-linkedin', botconfig_linkedin_page_save: 'bi-linkedin', botconfig_linkedin_page_remove: 'bi-linkedin',
+    botconfig_discord_channel_add: 'bi-discord', botconfig_discord_channel_save: 'bi-discord', botconfig_discord_channel_remove: 'bi-discord',
     linkedin_oauth_connect: 'bi-linkedin',
     botcompose_rss_repost: 'bi-arrow-repeat',
     botcompose_mastodon_post: 'bi-mastodon',
     botcompose_linkedin_post: 'bi-linkedin',
+    botcompose_discord_post: 'bi-discord',
+    scheduled_post_create: 'bi-calendar-plus',
+    scheduled_post_delete: 'bi-calendar-x',
     file_write: 'bi-pencil', file_delete: 'bi-trash', file_upload: 'bi-cloud-upload',
     post_create: 'bi-file-earmark-plus', post_delete: 'bi-file-earmark-x',
     post_publish: 'bi-send', post_duplicate: 'bi-files',
@@ -3208,6 +3217,7 @@ window.addEventListener('DOMContentLoaded', () => {
     renderStreamers(_config.twitch || {});
     renderFeeds(_config.rss || {});
     renderMastodon(_config.mastodon || {});
+    renderDiscordChannels(_config.discord_channels || {});
     renderLinkedinPages(_config.linkedin?.pages || {});
     renderLinkedinConnection(_config.linkedin || {});
   }
@@ -3325,7 +3335,9 @@ window.addEventListener('DOMContentLoaded', () => {
       Object.entries(_config?.mastodon || {}).map(([k, v]) => [k, v.label || k]),
       f.mastodon_account || '');
     populateSelect('rssLinkedinPage',
-      Object.entries(_config?.linkedin?.pages || {}).map(([k, v]) => [k, v.label || k]),
+      Object.entries(_config?.linkedin?.pages || {})
+        .filter(([, v]) => (v.type ?? 'organization') === 'personal')
+        .map(([k, v]) => [k, v.label || k]),
       f.linkedin_page || '');
     document.getElementById('rssModalError').classList.add('d-none');
     bootstrap.Modal.getOrCreateInstance(document.getElementById('rssModal')).show();
@@ -3401,6 +3413,54 @@ window.addEventListener('DOMContentLoaded', () => {
     if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('mastodonModal')).hide(); showSuccess('Account saved'); loadConfig(); }
   });
 
+  // ── Discord channels ──────────────────────────────────────────────────────────
+  function renderDiscordChannels(channels) {
+    const list  = document.getElementById('discordChannelList');
+    if (!list) return;
+    const names = Object.keys(channels);
+    if (!names.length) { list.innerHTML = '<div class="text-muted small">No channels configured.</div>'; return; }
+    list.innerHTML = names.map(name => {
+      const ch = channels[name];
+      return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1">
+        <i class="bi bi-discord text-primary flex-shrink-0"></i>
+        <span class="fw-semibold small">${esc(ch.label || name)}</span>
+        <code class="small text-muted">DISCORD_WEBHOOK_${esc(name.toUpperCase())}</code>
+        <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-discord-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-xs btn-outline-danger py-0 px-1 del-discord-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.edit-discord-btn').forEach(b => b.addEventListener('click', () => openDiscordChannelModal('edit', b.dataset.name)));
+    list.querySelectorAll('.del-discord-btn').forEach(b => b.addEventListener('click', () => deleteItem('remove_discord_channel', b.dataset.name, `Remove channel "${b.dataset.name}"?`, 'Channel removed')));
+  }
+
+  function openDiscordChannelModal(mode, name = '') {
+    const ch = (mode === 'edit' && _config?.discord_channels?.[name]) || {};
+    document.getElementById('discordChannelModalTitle').textContent = mode === 'add' ? 'Add Discord Channel' : 'Edit Discord Channel';
+    document.getElementById('discordChannelModalMode').value = mode;
+    document.getElementById('discordChannelName').value = name;
+    document.getElementById('discordChannelName').disabled = mode === 'edit';
+    document.getElementById('discordChannelLabel').value = ch.label ?? '';
+    document.getElementById('discordChannelModalError').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('discordChannelModal')).show();
+  }
+
+  document.getElementById('addDiscordChannelBtn').addEventListener('click', () => openDiscordChannelModal('add'));
+  document.getElementById('discordChannelModalSaveBtn').addEventListener('click', async () => {
+    const mode  = document.getElementById('discordChannelModalMode').value;
+    const name  = document.getElementById('discordChannelName').value.trim();
+    const errEl = document.getElementById('discordChannelModalError');
+    errEl.classList.add('d-none');
+    if (!name) { errEl.textContent = 'Key required'; errEl.classList.remove('d-none'); return; }
+    const ok = await apiPost({
+      action: mode === 'add' ? 'add_discord_channel' : 'save_discord_channel',
+      name,
+      data: { label: document.getElementById('discordChannelLabel').value.trim() },
+    }, errEl);
+    if (ok) { bootstrap.Modal.getOrCreateInstance(document.getElementById('discordChannelModal')).hide(); showSuccess('Channel saved'); loadConfig(); }
+  });
+
   // ── LinkedIn pages ────────────────────────────────────────────────────────────
   function renderLinkedinConnection(li) {
     const label = document.getElementById('liConnectionLabel');
@@ -3421,20 +3481,23 @@ window.addEventListener('DOMContentLoaded', () => {
   function renderLinkedinPages(pages) {
     const list = document.getElementById('linkedinPagesList');
     const names = Object.keys(pages);
-    if (!names.length) { list.innerHTML = '<div class="text-muted small">No pages configured.</div>'; return; }
+    if (!names.length) { list.innerHTML = '<div class="text-muted small">No profiles configured.</div>'; return; }
     list.innerHTML = names.map(name => {
       const p = pages[name];
       const isPersonal = p.type === 'personal';
       const badge = isPersonal
         ? `<span class="badge bg-secondary fw-normal">Personal</span>`
-        : `<code class="small text-muted">${esc(p.organization_id || '–')}</code>`;
+        : `<span class="badge bg-warning text-dark fw-normal">Org (posting not supported)</span>`;
+      const composeBtn = isPersonal
+        ? `<button class="btn btn-xs btn-outline-secondary py-0 px-1 compose-linkedin-btn"
+                   data-name="${esc(name)}" data-label="${esc(p.label || name)}" title="Post to LinkedIn">
+             <i class="bi bi-pencil-square"></i></button>`
+        : '';
       return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1">
         <span class="fw-semibold small">${esc(p.label || name)}</span>
         ${badge}
         <div class="ms-auto d-flex gap-1">
-          <button class="btn btn-xs btn-outline-secondary py-0 px-1 compose-linkedin-btn"
-                  data-name="${esc(name)}" data-label="${esc(p.label || name)}" title="Post to LinkedIn">
-            <i class="bi bi-pencil-square"></i></button>
+          ${composeBtn}
           <button class="btn btn-xs btn-outline-secondary py-0 px-1 edit-lipage-btn" data-name="${esc(name)}"><i class="bi bi-pencil"></i></button>
           <button class="btn btn-xs btn-outline-danger py-0 px-1 del-lipage-btn" data-name="${esc(name)}"><i class="bi bi-trash"></i></button>
         </div>
@@ -3490,7 +3553,7 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('composeModalError').classList.add('d-none');
     document.getElementById('composeHint').textContent = type === 'mastodon'
       ? 'Plain text post — no image upload from this composer.'
-      : 'Text post to LinkedIn organization page.';
+      : 'Text post to your LinkedIn profile.';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('composeModal')).show();
     setTimeout(() => document.getElementById('composeText').focus(), 300);
   }
@@ -3544,6 +3607,150 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   loadConfig();
+})();
+
+// ── Bot: schedule editor ─────────────────────────────────────────────────────
+(function () {
+  const panel = document.getElementById('botSchedulePanel');
+  if (!panel) return;
+  const pid = panel.dataset.projectId;
+
+  let _targets = { discord: [], mastodon: [], linkedin: [] };
+
+  async function loadTargets() {
+    const r = await fetch('/api/post_schedule?action=targets&project_id=' + pid);
+    const d = await r.json();
+    if (d.error) { showError(d.error); return; }
+    _targets = d;
+    renderPicker('Discord', 'schedDiscordChannels', 'schedDiscordEmpty', d.discord, 'discord');
+    renderPicker('Mastodon', 'schedMastodonAccounts', 'schedMastodonEmpty', d.mastodon, 'mastodon');
+    renderPicker('LinkedIn', 'schedLinkedinProfiles', 'schedLinkedinEmpty', d.linkedin, 'linkedin');
+  }
+
+  function renderPicker(name, containerId, emptyId, items, platform) {
+    const container = document.getElementById(containerId);
+    const emptyEl   = document.getElementById(emptyId);
+    if (!container) return;
+    if (!items.length) {
+      container.innerHTML = '';
+      emptyEl?.classList.remove('d-none');
+      return;
+    }
+    emptyEl?.classList.add('d-none');
+    container.innerHTML = items.map(item => `
+      <div class="form-check">
+        <input class="form-check-input sched-target-check"
+               type="checkbox" id="st_${platform}_${esc(item.key)}"
+               data-platform="${esc(platform)}" data-target="${esc(item.key)}">
+        <label class="form-check-label small" for="st_${platform}_${esc(item.key)}">${esc(item.label)}</label>
+      </div>`).join('');
+  }
+
+  function togglePicker(checkboxId, pickerId) {
+    const cb = document.getElementById(checkboxId);
+    const pk = document.getElementById(pickerId);
+    if (cb && pk) cb.addEventListener('change', () => pk.classList.toggle('d-none', !cb.checked));
+  }
+  togglePicker('schedUseDiscord',  'schedDiscordPicker');
+  togglePicker('schedUseMastodon', 'schedMastodonPicker');
+  togglePicker('schedUseLinkedin', 'schedLinkedinPicker');
+
+  document.getElementById('schedSubmitBtn').addEventListener('click', async () => {
+    const content = document.getElementById('schedContent').value.trim();
+    const url     = document.getElementById('schedUrl').value.trim();
+    const at      = document.getElementById('schedAt').value;
+    const errEl   = document.getElementById('schedError');
+    errEl.classList.add('d-none');
+
+    if (!content) { errEl.textContent = 'Content is required'; errEl.classList.remove('d-none'); return; }
+    if (!at)      { errEl.textContent = 'Scheduled time is required'; errEl.classList.remove('d-none'); return; }
+
+    const targets = [];
+    panel.querySelectorAll('.sched-target-check:checked').forEach(cb => {
+      targets.push({ platform: cb.dataset.platform, target: cb.dataset.target });
+    });
+    if (!targets.length) { errEl.textContent = 'Select at least one platform target'; errEl.classList.remove('d-none'); return; }
+
+    const r = await fetch('/api/post_schedule', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: +pid, action: 'create', content, url, scheduled_at: at, targets }),
+    });
+    const d = await r.json();
+    if (d.error) { errEl.textContent = d.error; errEl.classList.remove('d-none'); return; }
+
+    showSuccess('Post scheduled');
+    document.getElementById('schedContent').value = '';
+    document.getElementById('schedUrl').value = '';
+    document.getElementById('schedAt').value = '';
+    panel.querySelectorAll('.sched-target-check').forEach(cb => cb.checked = false);
+    ['schedDiscordPicker', 'schedMastodonPicker', 'schedLinkedinPicker'].forEach(id => document.getElementById(id)?.classList.add('d-none'));
+    ['schedUseDiscord', 'schedUseMastodon', 'schedUseLinkedin'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+    loadPosts();
+  });
+
+  async function loadPosts() {
+    const r = await fetch('/api/post_schedule?project_id=' + pid);
+    const d = await r.json();
+    const list = document.getElementById('schedPostsList');
+    if (d.error) { list.innerHTML = `<div class="text-danger small">${esc(d.error)}</div>`; return; }
+    if (!d.posts.length) { list.innerHTML = '<div class="text-muted small">No scheduled posts yet.</div>'; return; }
+
+    const statusBadge = s => {
+      const map = { pending: 'bg-warning text-dark', processing: 'bg-info text-dark', done: 'bg-success', partial: 'bg-danger', sent: 'bg-success', failed: 'bg-danger' };
+      return `<span class="badge ${map[s] || 'bg-secondary'} fw-normal">${esc(s)}</span>`;
+    };
+    const platformIcon = p => ({ discord: 'bi-discord', mastodon: 'bi-mastodon', linkedin: 'bi-linkedin' }[p] || 'bi-dot');
+
+    list.innerHTML = d.posts.map(post => {
+      const targets = (post.targets || []).map(t => `
+        <div class="d-flex align-items-center gap-2 small ms-2">
+          <i class="bi ${platformIcon(t.platform)} text-muted"></i>
+          <span class="text-muted">${esc(t.target)}</span>
+          ${statusBadge(t.status)}
+          ${t.error ? `<span class="text-danger small" title="${esc(t.error)}"><i class="bi bi-exclamation-circle"></i></span>` : ''}
+          ${t.status === 'failed' ? `<button class="btn btn-xs btn-outline-secondary py-0 px-1 retry-target-btn" data-target-id="${t.id}">Retry</button>` : ''}
+        </div>`).join('');
+      return `<div class="border rounded p-2 mb-2">
+        <div class="d-flex align-items-start gap-2 mb-1">
+          <div class="flex-grow-1">
+            <div class="small fw-semibold">${esc(post.content.substring(0, 120))}${post.content.length > 120 ? '…' : ''}</div>
+            ${post.url ? `<a href="${esc(post.url)}" class="small text-muted" target="_blank">${esc(post.url)}</a>` : ''}
+          </div>
+          <div class="d-flex flex-column align-items-end gap-1 flex-shrink-0">
+            ${statusBadge(post.status)}
+            <span class="text-muted small">${esc(post.scheduled_at)}</span>
+          </div>
+          <button class="btn btn-xs btn-outline-danger py-0 px-1 del-post-btn flex-shrink-0" data-post-id="${post.id}"><i class="bi bi-trash"></i></button>
+        </div>
+        ${targets}
+      </div>`;
+    }).join('');
+
+    list.querySelectorAll('.del-post-btn').forEach(b => b.addEventListener('click', () => {
+      confirmAction('Delete this scheduled post?', async () => {
+        const r = await fetch('/api/post_schedule', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: +pid, action: 'delete', id: +b.dataset.postId }),
+        });
+        const d = await r.json();
+        if (d.ok) { showSuccess('Post deleted'); loadPosts(); }
+        else showError(d.error || 'Delete failed');
+      });
+    }));
+
+    list.querySelectorAll('.retry-target-btn').forEach(b => b.addEventListener('click', async () => {
+      const r = await fetch('/api/post_schedule', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: +pid, action: 'retry_target', target_id: +b.dataset.targetId }),
+      });
+      const d = await r.json();
+      if (d.ok) { showSuccess('Target queued for retry'); loadPosts(); }
+      else showError(d.error || 'Retry failed');
+    }));
+  }
+
+  loadTargets();
+  loadPosts();
 })();
 
 // ── Bot: log viewer ───────────────────────────────────────────────────────────

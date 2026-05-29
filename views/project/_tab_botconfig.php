@@ -31,8 +31,21 @@
 
   <hr>
 
-  <!-- LinkedIn Pages -->
-  <h6 class="mb-3 mt-3"><i class="bi bi-linkedin me-1 text-primary"></i>LinkedIn Pages</h6>
+  <!-- Discord Channels (for scheduled posts) -->
+  <h6 class="mb-1 mt-3"><i class="bi bi-discord me-1 text-primary"></i>Discord Channels</h6>
+  <p class="text-muted small mb-3">
+    Add the webhook URL to <code>.env</code> as <code>DISCORD_WEBHOOK_&lt;KEY&gt;</code> (uppercase).
+    These channels are available as targets for scheduled posts.
+  </p>
+  <div id="discordChannelList" class="mb-2"><div class="text-muted small">Loading…</div></div>
+  <button class="btn btn-sm btn-outline-primary mb-4" id="addDiscordChannelBtn">
+    <i class="bi bi-plus-lg me-1"></i>Add Channel
+  </button>
+
+  <hr>
+
+  <!-- LinkedIn -->
+  <h6 class="mb-3 mt-3"><i class="bi bi-linkedin me-1 text-primary"></i>LinkedIn</h6>
 
   <div class="card mb-3">
     <div class="card-body py-2 d-flex align-items-center gap-3">
@@ -197,6 +210,36 @@
         <div class="text-danger small d-none flex-grow-1" id="composeModalError"></div>
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary btn-sm" id="composeModalPostBtn">Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Discord channel modal -->
+<div class="modal fade" id="discordChannelModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="discordChannelModalTitle">Add Discord Channel</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="discordChannelModalMode">
+        <div class="mb-2">
+          <label class="form-label small">Channel key</label>
+          <input type="text" id="discordChannelName" class="form-control form-control-sm font-monospace"
+                 placeholder="general" autocomplete="off">
+          <div class="form-text small">Used as <code>DISCORD_WEBHOOK_&lt;KEY&gt;</code> in .env (uppercase).</div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small">Label</label>
+          <input type="text" id="discordChannelLabel" class="form-control form-control-sm" placeholder="General">
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <div class="text-danger small d-none flex-grow-1" id="discordChannelModalError"></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="discordChannelModalSaveBtn">Save</button>
       </div>
     </div>
   </div>
